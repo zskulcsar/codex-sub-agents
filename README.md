@@ -31,6 +31,14 @@ Expose stable mentions via the `[aliases]` table so Codex users can call agents 
 
 Inside Codex, run `agent csa:default`, `agent csa:test-agent`, or `agent csa:security` to dispatch the matching sub-agent without remembering internal IDs.
 
+Once the configuration bundle is in place, register the MCP server automatically:
+
+```bash
+codex-sub-agent configure --config ~/.config/codex/codex_sub_agents.toml
+```
+
+The command updates (or creates) `./.codex/config.toml` in your current project and safely skips the insert if the stanza already exists. Override the target file with `--codex-config` if needed.
+
 Set the following environment variables so the agent can authenticate:
 
 - `OPENAI_API_KEY`
@@ -38,7 +46,7 @@ Set the following environment variables so the agent can authenticate:
 
 ## Registering with Codex CLI
 
-Add an entry to `.codex/config.toml`:
+If you prefer to make the change manually, add the following stanza to `.codex/config.toml`:
 
 ```toml
 [mcp_servers.codex_sub_agent]
@@ -77,3 +85,7 @@ Once registered you can call the agent from the Codex CLI (or other MCP-aware cl
    Equivalent Codex mention: `agent csa:security`
 
 If you omit `--agent`, the CLI will choose the `default_agent` specified in the configuration file.
+
+### TODO
+
+* Update the code so that the agents can be configured with markdown files instead of toml. The files should live in separate folders under the `config` bundling the agent's description and configuration together.

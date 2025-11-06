@@ -1,4 +1,4 @@
-.PHONY: help venv package docs lint typecheck test clean
+.PHONY: help venv package docs lint typecheck test install clean
 
 UV ?= uv
 PYTHON ?= .venv/bin/python
@@ -11,6 +11,7 @@ help:
 	@echo "  lint        - Run Ruff lint checks"
 	@echo "  typecheck   - Run mypy static type checks"
 	@echo "  test        - Run unit tests under ./tests using pytest"
+	@echo "  install     - Install the CLI into $$HOME/.local/bin for direct use"
 	@echo "  clean       - Remove build artifacts, caches, and the virtual environment"
 
 venv:
@@ -42,6 +43,9 @@ typecheck: venv
 test: venv
 	$(UV) pip install --python .venv pytest
 	.venv/bin/pytest tests
+
+install:
+	python3 -m pip install --user --upgrade .
 
 clean:
 	rm -rf .venv build dist *.egg-info

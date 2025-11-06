@@ -16,6 +16,13 @@ from agents.mcp import MCPServer, MCPServerStdio, MCPServerStdioParams, MCPServe
 from .config_loader import AgentSettings, InvalidConfiguration, MCPHttpConfig, MCPStdioConfig, SubAgentConfig, load_config
 
 
+def _default_config_path() -> Path | None:
+    """Return the packaged config path if it exists alongside the module."""
+
+    candidate = Path(__file__).resolve().parent.parent / "config" / "codex_sub_agents.toml"
+    return candidate if candidate.exists() else None
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser with all supported flags."""
 
@@ -23,13 +30,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         prog="codex-sub-agent",
         description="Launch the Codex CLI sub-agent described in the configuration file.",
     )
-    default_config = (
-        Path(__file__).resolve().parent.parent / "config" / "codex_sub_agents.toml"
-    )
+    default_config = _default_config_path()
     parser.add_argument(
         "--config",
         type=Path,
-        default=default_config if default_config.exists() else None,
+        default=default_config,
         help="Path to the TOML configuration file describing the agent task.",
     )
     parser.add_argument(
@@ -54,6 +59,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--print-config",
         action="store_true",
         help="Print the resolved configuration and exit.",
+    )
+    return parser
+
+
+def build_configure_parser() -> argparse.ArgumentParser:
+    """Parser for the ``configure`` helper command."""
+
+    parser = argparse.ArgumentParser(
+        prog="codex-sub-agent configure",
+        description="Add the codex-sub-agent MCP stanza to the local .codex/config.toml file.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to codex_sub_agents.toml that Codex should reference.",
+    )
+    parser.add_argument(
+        "--codex-config",
+        type=Path,
+        default=Path.cwd() / ".codex" / "config.toml",
+        help="Path to the Codex config file to update (default: ./.codex/config.toml).",
     )
     return parser
 
@@ -179,6 +206,13 @@ async def run_agent(
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point compatible with ``python -m codex_sub_agent.cli``."""
 
+    argv = argv or sys.argv[1:]
+
+    if argv and argv[0] == "configure":
+        config_parser = build_configure_parser()
+        args = config_parser.parse_args(argv[1:])
+        return configure_codex(args.config, args.codex_config)
+
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
@@ -232,3 +266,37 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())
+
+
+def configure_codex(config_path: Path, codex_config_path: Path) -> int:
+    """Insert the codex-sub-agent stanza into the Codex CLI configuration file."""
+
+    config_path = config_path.expanduser().resolve()
+    if not config_path.exists():
+        print(f"Configuration file not found: {config_path}", file=sys.stderr)
+        return 1
+
+    codex_config_path = codex_config_path.expanduser()
+    codex_config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    stanza_header = "[mcp_servers.codex_sub_agent]"
+    stanza = (
+        f"{stanza_header}\n"
+        'command = "codex-sub-agent"\n'
+        f'args = ["--config", "{config_path}"]\n'
+        "startup_timeout_sec = 60\n"
+        "client_session_timeout_seconds = 3600\n"
+    )
+
+    if codex_config_path.exists():
+        existing_text = codex_config_path.read_text()
+        if stanza_header in existing_text:
+            print(f"{codex_config_path} already contains the codex_sub_agent stanza.")
+            return 0
+        newline = "" if existing_text.endswith("\n") else "\n"
+        codex_config_path.write_text(existing_text + newline + "\n" + stanza)
+    else:
+        codex_config_path.write_text(stanza)
+
+    print(f"Added codex_sub_agent MCP server configuration to {codex_config_path}")
+    return 0
