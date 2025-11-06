@@ -1,0 +1,32 @@
+default_agent = "workflow"
+agent_files = ["agents/workflow.toml", "agents/security_review.toml", "agents/test_agent.toml"]
+
+[openai]
+api_key_env_var = "OPENAI_API_KEY"
+default_api = "responses"
+
+[aliases]
+"csa:default" = "workflow"
+"csa:test-agent" = "test_agent"
+"csa:security" = "security_review"
+
+[mcp_servers.codex]
+type = "stdio"
+name = "Codex CLI"
+command = "npx"
+args = ["-y", "codex", "mcp"]
+client_session_timeout_seconds = 360000
+
+[mcp_servers.context7]
+type = "stdio"
+name = "Context7 Documentation"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+client_session_timeout_seconds = 60
+
+[mcp_servers.github]
+type = "http"
+name = "GitHub"
+url = "https://api.githubcopilot.com/mcp"
+bearer_token_env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
+client_session_timeout_seconds = 60

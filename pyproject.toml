@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-sub-agent"
+version = "0.1.0"
+description = "Reusable Codex CLI sub-agent packaged for Codex MCP workflows."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Your Team", email = "dev@example.com" }
+]
+license = { text = "MIT" }
+dependencies = [
+  "openai>=2.7.0",
+  "openai-agents>=0.5.0",
+  "pydantic>=2.12.0",
+]
+keywords = ["codex", "mcp", "agents", "context7", "github"]
+
+[project.scripts]
+codex-sub-agent = "codex_sub_agent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/example/codex-sub-agent"
+Source = "https://github.com/example/codex-sub-agent"
+Documentation = "https://github.com/example/codex-sub-agent"
+
+[tool.setuptools]
+packages = ["codex_sub_agent"]
+include-package-data = true
+
+[tool.setuptools.data-files]
+"share/codex-sub-agent/config" = [
+  "config/codex_sub_agents.toml",
+  "config/agents/workflow.toml",
+  "config/agents/security_review.toml",
+  "config/agents/test_agent.toml",
+]

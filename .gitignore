@@ -1,0 +1,7 @@
+.envrc
+*/__pycache__
+.venv
+.codex
+.docs
+*.egg-info
+dist
