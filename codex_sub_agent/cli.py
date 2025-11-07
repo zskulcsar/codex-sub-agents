@@ -43,6 +43,15 @@ class AgentBlueprint:
     mcp_server_names: List[str]
 
     def build_agent(self, mcp_servers: Iterable[MCPServer]) -> Agent[Any]:
+        """Create an Agents SDK `Agent` from the stored blueprint.
+
+        Args:
+            mcp_servers: Sequence of MCP server instances that should be exposed to
+                the agent run.
+
+        Returns:
+            Fully configured `Agent` ready to be executed with `Runner`.
+        """
         model_settings = ModelSettings()
         if self.settings.temperature is not None:
             model_settings.temperature = self.settings.temperature
@@ -133,21 +142,56 @@ class AgentRegistry:
         ]
 
     def resolve_tool_name(self, tool_name: str) -> AgentAliasEntry:
+        """Return the agent alias entry for a registered MCP tool name.
+
+        Args:
+            tool_name: Canonical MCP tool identifier returned by `list_tools`.
+
+        Returns:
+            The alias metadata associated with the requested tool.
+
+        Raises:
+            InvalidConfiguration: If the tool name is unknown.
+        """
         if tool_name not in self.tool_entries:
             raise InvalidConfiguration(f"Unknown tool '{tool_name}'.")
         return self.tool_entries[tool_name]
 
     def resolve_cli_alias(self, alias: str) -> AgentAliasEntry:
+        """Resolve CLI arguments (alias or tool name) to an agent entry.
+
+        Args:
+            alias: Name supplied by a user via CLI flags.
+
+        Returns:
+            Matching alias entry describing how to run the agent.
+
+        Raises:
+            InvalidConfiguration: If the alias is not configured.
+        """
         if alias not in self.cli_aliases:
             raise InvalidConfiguration(f"Unknown agent '{alias}'. Available: {', '.join(sorted(self.cli_aliases))}")
         return self.cli_aliases[alias]
 
     def iter_agent_summaries(self) -> Iterable[tuple[str, AgentSettings, List[str]]]:
+        """Yield configured agents with their CLI-visible aliases.
+
+        Returns:
+            Tuples of (agent_id, settings, aliases) for deterministic presentation.
+        """
         for agent_id, blueprint in sorted(self._blueprints.items()):
             yield agent_id, blueprint.settings, sorted(self.aliases_by_agent.get(agent_id, []))
 
     @staticmethod
     def _summarize_agent(blueprint: AgentBlueprint) -> str:
+        """Return a condensed description for displaying tool metadata.
+
+        Args:
+            blueprint: Agent blueprint whose instructions should be summarized.
+
+        Returns:
+            Single-line summary safe for CLI or MCP tool descriptions.
+        """
         primary_line = blueprint.settings.instructions.strip().splitlines()[0].strip()
         if len(primary_line) > 200:
             primary_line = primary_line[:197].rstrip() + "..."
@@ -155,6 +199,18 @@ class AgentRegistry:
 
     @staticmethod
     def _make_tool_name(alias: str, used: set[str]) -> str:
+        """Generate a sanitized, unique MCP tool name for an alias.
+
+        Args:
+            alias: Human-readable alias that needs to become an MCP tool name.
+            used: Existing tool names that must be avoided.
+
+        Returns:
+            Sanitized tool name composed of safe characters.
+
+        Raises:
+            InvalidConfiguration: If a compliant tool name cannot be derived.
+        """
         sanitized = re.sub(r"[^A-Za-z0-9_-]", "_", alias)
         sanitized = sanitized.strip("_") or "agent"
         candidate = sanitized
@@ -168,11 +224,21 @@ class AgentRegistry:
 
 
 def _default_config_path() -> Path | None:
+    """Return the packaged TOML path if it exists in the installed tree.
+
+    Returns:
+        Absolute path to the baked-in configuration or ``None`` if missing.
+    """
     candidate = Path(__file__).resolve().parent.parent / "config" / "codex_sub_agents.toml"
     return candidate if candidate.exists() else None
 
 
 def build_main_parser() -> argparse.ArgumentParser:
+    """Construct the primary CLI parser for launching the MCP server.
+
+    Returns:
+        Configured `argparse.ArgumentParser` for standard operations.
+    """
     parser = argparse.ArgumentParser(
         prog="codex-sub-agent",
         description="Expose configured Codex workflows as an MCP server.",
@@ -204,6 +270,11 @@ def build_main_parser() -> argparse.ArgumentParser:
 
 
 def build_configure_parser() -> argparse.ArgumentParser:
+    """Construct the `configure` sub-command parser.
+
+    Returns:
+        Parser pre-populated with the `configure` command options.
+    """
     parser = argparse.ArgumentParser(
         prog="codex-sub-agent configure",
         description="Add the codex-sub-agent MCP stanza to ./.codex/config.toml.",
@@ -227,6 +298,19 @@ async def initialize_mcp_servers(
     config: SubAgentConfig,
     server_names: Iterable[str],
 ) -> tuple[Dict[str, MCPServer], AsyncExitStack]:
+    """Start the MCP servers referenced by an agent blueprint.
+
+    Args:
+        config: Fully validated configuration with server definitions.
+        server_names: Names requested by the agent blueprint (duplicates are ignored).
+
+    Returns:
+        Tuple of (active servers map, exit stack) that must remain open.
+
+    Raises:
+        InvalidConfiguration: If an agent references an unknown server.
+        RuntimeError: If an HTTP server is missing a required credential.
+    """
     servers: Dict[str, MCPServer] = {}
     exit_stack = AsyncExitStack()
     await exit_stack.__aenter__()
@@ -284,6 +368,16 @@ async def run_agent_workflow(
     config: SubAgentConfig,
     requested_prompt: str | None,
 ) -> RunResult:
+    """Execute an agent locally and capture the runner result.
+
+    Args:
+        alias_entry: Agent metadata specifying model settings and MCP servers.
+        config: Root configuration containing MCP server definitions.
+        requested_prompt: Optional entry message override supplied by the user.
+
+    Returns:
+        Runner result emitted by the Agents SDK execution pipeline.
+    """
     servers, exit_stack = await initialize_mcp_servers(config, alias_entry.blueprint.mcp_server_names)
     try:
         agent = alias_entry.blueprint.build_agent(list(servers.values()))
@@ -294,6 +388,15 @@ async def run_agent_workflow(
 
 
 def format_run_result(alias_entry: AgentAliasEntry, result: RunResult) -> str:
+    """Render a `RunResult` into user-facing CLI text.
+
+    Args:
+        alias_entry: Agent metadata used when falling back to alias info.
+        result: Execution outcome captured from the Agents SDK.
+
+    Returns:
+        Display-ready text summarizing the agent's final output.
+    """
     final_output = getattr(result, "final_output", None)
     if isinstance(final_output, str) and final_output.strip():
         return final_output
@@ -309,6 +412,15 @@ def format_run_result(alias_entry: AgentAliasEntry, result: RunResult) -> str:
 
 
 async def serve(config: SubAgentConfig, registry: AgentRegistry) -> int:
+    """Expose configured agents as MCP tools over stdio.
+
+    Args:
+        config: Validated configuration used for runtime settings.
+        registry: Registry providing alias resolution and tool definitions.
+
+    Returns:
+        Exit status compatible with CLI conventions.
+    """
     server = Server(
         "codex-sub-agent",
         version=__version__,
@@ -351,6 +463,14 @@ async def serve(config: SubAgentConfig, registry: AgentRegistry) -> int:
 
 
 def ensure_openai_setup(config: SubAgentConfig) -> None:
+    """Validate and configure shared OpenAI credentials for the Agents SDK.
+
+    Args:
+        config: Global configuration describing key names and defaults.
+
+    Raises:
+        RuntimeError: If the required API key environment variable is missing.
+    """
     api_key = os.environ.get(config.openai.api_key_env_var)
     if not api_key:
         raise RuntimeError(
@@ -362,6 +482,14 @@ def ensure_openai_setup(config: SubAgentConfig) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for launching the MCP server or helper commands.
+
+    Args:
+        argv: Optional argument override primarily used for testing.
+
+    Returns:
+        Process exit code (0 for success, non-zero for errors).
+    """
     argv = argv or sys.argv[1:]
 
     if argv and argv[0] == "configure":
@@ -426,6 +554,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def configure_codex(config_path: Path, codex_config_path: Path) -> int:
+    """Write the codex-sub-agent stanza into ./.codex/config.toml.
+
+    Args:
+        config_path: Path to the codex_sub_agents.toml configuration.
+        codex_config_path: Target Codex configuration file to update.
+
+    Returns:
+        Integer exit status suitable for CLI usage.
+    """
     config_path = config_path.expanduser().resolve()
     if not config_path.exists():
         print(f"Configuration file not found: {config_path}", file=sys.stderr)

@@ -9,6 +9,14 @@ from typing import List
 
 
 def main(argv: List[str] | None = None) -> int:
+    """Proxy `codex mcp-server` while stripping Codex-only notifications.
+
+    Args:
+        argv: Optional CLI argument override used during testing.
+
+    Returns:
+        Exit code from the underlying `codex mcp-server` process.
+    """
     argv = argv or sys.argv[1:]
     command = ["npx", "-y", "codex", "mcp-server", *argv]
 
