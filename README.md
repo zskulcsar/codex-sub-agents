@@ -87,7 +87,7 @@ Once registered you can call the agent from the Codex CLI (or other MCP-aware cl
    ```
    Equivalent Codex mention: `agent csa_security` (alias `csa:security`)
 
-If you omit `--agent`, the CLI will choose the `default_agent` specified in the configuration file.
+If you omit `--run-agent`, the CLI starts the MCP server and exposes every configured agent as an MCP tool.
 
 ### TODO
 

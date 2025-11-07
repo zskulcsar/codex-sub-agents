@@ -1,0 +1,19 @@
+site_name: Codex Sub-Agent
+site_description: Reusable MCP workflows for Codex CLI
+site_url: https://example.com/codex-sub-agent
+repo_url: https://github.com/example/codex-sub-agent
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - Troubleshooting: troubleshooting.md
+  - How-To Guides: how-to-guides.md
+docs_dir: docs
+site_dir: site
+theme:
+  name: mkdocs
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/example/codex-sub-agent

@@ -24,13 +24,9 @@ package: venv
 	$(PYTHON) -m build
 
 docs: venv
-	$(UV) pip install --python .venv pdoc
-	rm -rf docs
-	mkdir -p docs/config
-	PYTHONPATH=. .venv/bin/pdoc --docformat google --output-directory docs codex_sub_agent
-	cp config/*.toml docs/config/
-	rm -rf docs/config/agents
-	cp -R config/agents docs/config/
+	$(UV) pip install --python .venv mkdocs
+	rm -rf site
+	.venv/bin/mkdocs build
 
 lint: venv
 	$(UV) pip install --python .venv ruff
@@ -48,5 +44,6 @@ install:
 	python3 -m pip install --upgrade .
 
 clean:
-	rm -rf .venv build dist *.egg-info
+	rm -rf .venv build dist site .uv-cache *.egg-info
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage
