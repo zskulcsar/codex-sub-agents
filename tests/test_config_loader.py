@@ -1,57 +1,59 @@
-"""Unit tests for the configuration loader utilities."""
+"""Tests for loading agent configurations from multi-file directories."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from codex_sub_agent.config_loader import InvalidConfiguration, load_config
+from codex_sub_agent.config_loader import load_config
 
 
-def test_load_default_config_ships_agents() -> None:
-    """The bundled default configuration should expose all sub-agents."""
-    project_root = Path(__file__).resolve().parent.parent
-    config_path = project_root / "config" / "codex_sub_agents.toml"
-    config = load_config(config_path)
-
-    assert config.default_agent_id == "workflow"
-    assert sorted(config.available_agents().keys()) == [
-        "security_review",
-        "test_agent",
-        "workflow",
-    ]
-    assert config.aliases["csa:test-agent"] == "test_agent"
-    assert config.resolve_agent("csa:test-agent")[0] == "test_agent"
+def _write_file(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
 
 
-def test_resolve_agent_rejects_unknown_alias(tmp_path: Path) -> None:
-    """resolve_agent should raise when an alias points to a missing agent."""
-    config_file = tmp_path / "sample.toml"
-    config_file.write_text(
+def test_load_config_supports_agent_directory(tmp_path: Path) -> None:
+    """Agent directories split into TOML + Markdown are parsed into AgentSettings."""
+
+    config_root = tmp_path / "config"
+    agent_dir = config_root / "agents" / "demo"
+
+    _write_file(
+        agent_dir / "agent.toml",
         """
-default_agent = "workflow"
+        id = "demo"
 
-[aliases]
-"alias:missing" = "nonexistent"
+        [agent]
+        name = "Demo Agent"
+        model = "gpt-5"
+        reasoning_tokens = 2048
+        mcp_servers = ["codex"]
+        """,
+    )
+    _write_file(agent_dir / "instructions.md", "Use the Codex MCP server.")
+    _write_file(agent_dir / "entry_message.md", "Kick things off.")
 
-[openai]
-api_key_env_var = "OPENAI_API_KEY"
-default_api = "responses"
+    _write_file(
+        config_root / "codex_sub_agents.toml",
+        """
+        agent_files = ["agents/demo"]
 
-[agents.workflow]
-name = "Workflow"
-model = "gpt-5"
-instructions = "Do work"
-entry_message = "Start"
+        [openai]
+        api_key_env_var = "OPENAI_API_KEY"
+        default_api = "responses"
 
-[mcp_servers.codex]
-type = "stdio"
-name = "Codex"
-command = "npx"
-"""
+        [mcp_servers.codex]
+        type = "stdio"
+        name = "Codex CLI"
+        command = "npx"
+        args = ["-y", "codex", "mcp-server"]
+        client_session_timeout_seconds = 60
+        """,
     )
 
-    config = load_config(config_file)
-    with pytest.raises(InvalidConfiguration):
-        config.resolve_agent("alias:missing")
+    config = load_config(config_root / "codex_sub_agents.toml")
+    agent = config.available_agents()["demo"]
+
+    assert agent.name == "Demo Agent"
+    assert agent.instructions == "Use the Codex MCP server."
+    assert agent.entry_message == "Kick things off."

@@ -1,0 +1,7 @@
+id = "workflow"
+
+[agent]
+name = "Codex Workflow Sub-Agent"
+model = "gpt-5"
+reasoning_tokens = 4096
+mcp_servers = ["codex", "context7", "github"]

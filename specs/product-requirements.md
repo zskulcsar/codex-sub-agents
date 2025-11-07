@@ -17,7 +17,7 @@ Codex Sub-Agent packages reusable MCP workflows so engineers can install Codex C
 - **A1:** As an onboarding engineer, I need copy/pasteable install steps so that I can verify Codex Sub-Agent locally without guesswork. _Acceptance:_ quickstart includes prerequisites, install commands, config copy, and validation.
 - **A2:** As the same engineer, I need a verification command so that I know the install succeeded. _Acceptance:_ `--list-agents` and `--run-agent csa:test-agent` documented with expected output.
 - **B1:** As a staff developer, I need a schema reference for MCP servers so that I can add new entries safely. _Acceptance:_ configuration doc lists required keys, defaults, and validation tips.
-- **B2:** As the developer, I need alias/tool guidance so that Codex users see stable tool names. _Acceptance:_ documentation explains alias-to-tool sanitization.
+- **B2:** As the developer, I need alias/tool guidance so that Codex users see stable tool names. _Acceptance:_ documentation explains alias-to-tool sanitization and the per-agent directory structure (`agent.toml`, Markdown instructions/entry).
 - **D1:** As a support engineer, I need symptom-based troubleshooting so that I can map errors to fixes quickly. _Acceptance:_ troubleshooting doc includes missing env vars, MCP timeouts, GitHub auth, and Codex-specific noise.
 
 ## Success Metrics

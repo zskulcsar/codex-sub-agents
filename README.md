@@ -14,7 +14,7 @@ uv pip install --system .
 Copy the configuration bundle from the project’s root `config/` directory to your preferred location (for example `~/.config/codex/`), then adjust paths as needed:
 
 - `codex_sub_agents.toml` defines shared OpenAI settings, the `[aliases]` map, and any reusable MCP server definitions (Codex wrapper, GitHub, Context7, etc.). The `[mcp_servers.*]` section is optional—declare only the servers you plan to reference from agents.
-- Each `agents/<name>.toml` file describes a workflow and lists the MCP servers it needs via a `mcp_servers = ["codex", ...]` array. Servers not referenced will never be launched, so agents explicitly opt into the capabilities they require.
+- Each `agents/<name>/` directory contains `agent.toml`, `entry_message.md`, and `instructions.md`. The TOML file holds the structured fields (id, model, mcp_servers, etc.) while the Markdown files keep rich text for the entry message and long-form instructions.
 
 Paths listed under `agent_files` are resolved relative to the main TOML file, so moving the folder together keeps references intact. Add or remove agent files by editing that list; each agent file must declare an `id` plus an `[agent]` table with the usual fields (instructions, entry_message, etc.).
 When an agent lists a server in `mcp_servers`, the runtime verifies that an entry exists under `[mcp_servers.<name>]` before launching the workflow so typos are caught up front.

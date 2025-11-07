@@ -1,0 +1,7 @@
+id = "security_review"
+
+[agent]
+name = "Codex Security Reviewer"
+model = "gpt-5"
+reasoning_tokens = 6144
+mcp_servers = ["codex", "context7", "github"]

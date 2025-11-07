@@ -136,19 +136,32 @@ def load_config(config_path: Path) -> SubAgentConfig:
             malformed.
     """
 
-    def _load_agent_file(file_path: Path) -> tuple[str, Dict[str, object]]:
-        """Read an external agent file and return its identifier and payload."""
+    def _load_agent_dir(agent_path: Path) -> tuple[str, Dict[str, object]]:
+        """Read an agent directory containing TOML + Markdown assets."""
+
+        if not agent_path.is_dir():
+            raise InvalidConfiguration(
+                f"Agent path {agent_path} must be a directory containing agent.toml, "
+                "entry_message.md, and instructions.md."
+            )
+
+        toml_path = agent_path / "agent.toml"
+        instructions_path = agent_path / "instructions.md"
+        entry_path = agent_path / "entry_message.md"
+
         try:
-            with file_path.open("rb") as fh:
+            with toml_path.open("rb") as fh:
                 agent_payload = tomllib.load(fh)
         except FileNotFoundError as exc:
-            raise InvalidConfiguration(f"Agent file not found: {file_path}") from exc
+            raise InvalidConfiguration(f"Agent file not found: {toml_path}") from exc
         except tomllib.TOMLDecodeError as exc:
-            raise InvalidConfiguration(f"Failed to parse agent file {file_path}: {exc}") from exc
+            raise InvalidConfiguration(f"Failed to parse agent file {toml_path}: {exc}") from exc
 
         agent_id = agent_payload.get("id")
         if not isinstance(agent_id, str) or not agent_id:
-            raise InvalidConfiguration(f"Agent file {file_path} is missing a non-empty 'id' field.")
+            raise InvalidConfiguration(
+                f"Agent file {toml_path} is missing a non-empty 'id' field."
+            )
 
         if "agent" in agent_payload:
             agent_data = agent_payload["agent"]
@@ -157,8 +170,24 @@ def load_config(config_path: Path) -> SubAgentConfig:
 
         if not isinstance(agent_data, dict):
             raise InvalidConfiguration(
-                f"Agent file {file_path} must define agent settings under an 'agent' table."
+                f"Agent file {toml_path} must define agent settings under an 'agent' table."
             )
+
+        def _load_markdown(markdown_path: Path, label: str) -> str:
+            try:
+                content = markdown_path.read_text(encoding="utf-8").strip()
+            except FileNotFoundError as exc:
+                raise InvalidConfiguration(
+                    f"Agent directory {agent_path} is missing {label} file: {markdown_path.name}"
+                ) from exc
+            if not content:
+                raise InvalidConfiguration(
+                    f"{label.capitalize()} in {markdown_path} must not be empty."
+                )
+            return content
+
+        agent_data["instructions"] = _load_markdown(instructions_path, "instructions")
+        agent_data["entry_message"] = _load_markdown(entry_path, "entry message")
 
         return agent_id, agent_data
 
@@ -185,7 +214,7 @@ def load_config(config_path: Path) -> SubAgentConfig:
             if not isinstance(rel_path, str):
                 raise InvalidConfiguration(f"agent_files[{index}] must be a string path.")
             file_path = (base_dir / rel_path).resolve()
-            agent_id, agent_data = _load_agent_file(file_path)
+            agent_id, agent_data = _load_agent_dir(file_path)
             if agent_id in agents_table:
                 raise InvalidConfiguration(
                     f"Duplicate agent id '{agent_id}' defined in {file_path}."

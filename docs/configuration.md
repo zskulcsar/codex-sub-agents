@@ -8,12 +8,17 @@ Use this guide when you need to tune agents, add MCP servers, or double-check sc
 config/
   codex_sub_agents.toml        # root file referenced by Codex CLI
   agents/
-    workflow.toml
-    security_review.toml
-    test_agent.toml
+    workflow/
+      agent.toml
+      instructions.md
+      entry_message.md
+    security_review/
+      ...
+    test_agent/
+      ...
 ```
 
-Set the `--config` flag on every CLI call so the loader knows which bundle to use.
+Set the `--config` flag on every CLI call so the loader knows which bundle to use. Each agent directory is self-contained, so copying or deleting a workflow only requires moving a single folder.
 
 ## OpenAI Block
 
@@ -54,19 +59,23 @@ Headers can be set via the optional `headers = {"User-Agent" = "..."}` map.
 
 ## Agents & Aliases
 
-Each agent file defines:
+Each agent directory defines:
 
 ```toml
+# agents/workflow/agent.toml
 id = "workflow"
 
 [agent]
 name = "Codex Workflow Sub-Agent"
 model = "gpt-5"
 reasoning_tokens = 4096
-instructions = """..."""
-entry_message = """..."""
 mcp_servers = ["codex", "context7", "github"]
 ```
+
+Free-form text lives in Markdown files sitting next to the TOML:
+
+- `instructions.md` for the long-form instructions block
+- `entry_message.md` for the kickoff prompt shown to the workflow
 
 Key tips:
 - `mcp_servers` must reference names that exist under `[mcp_servers.*]`.

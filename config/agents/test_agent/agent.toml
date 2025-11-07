@@ -1,0 +1,6 @@
+id = "test_agent"
+
+[agent]
+name = "Codex Configuration Tester"
+model = "gpt-5"
+mcp_servers = ["codex"]

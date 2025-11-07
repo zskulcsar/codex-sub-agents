@@ -4,9 +4,9 @@ Pick the scenario closest to your task and follow the numbered steps.
 
 ## Add a New Agent Profile
 
-1. Duplicate one of the existing files under `config/agents/` and give it a new `id`.
-2. Update `[agent]` fields (`name`, `model`, `instructions`, `entry_message`).
-3. List the MCP servers the agent needs via `mcp_servers = ["codex", ...]`.
+1. Copy an existing folder under `config/agents/` (for example `workflow/`) and rename it.
+2. Edit the new folder’s `agent.toml` (`id`, `name`, `model`, `mcp_servers`, tokens/temperature).
+3. Update `instructions.md` and `entry_message.md` with Markdown content.
 4. Add an alias in `codex_sub_agents.toml`:
    ```toml
    [aliases]

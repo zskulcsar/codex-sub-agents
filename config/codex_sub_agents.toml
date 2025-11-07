@@ -1,5 +1,5 @@
 default_agent = "workflow"
-agent_files = ["agents/workflow.toml", "agents/security_review.toml", "agents/test_agent.toml"]
+agent_files = ["agents/workflow", "agents/security_review", "agents/test_agent"]
 
 [openai]
 api_key_env_var = "OPENAI_API_KEY"
