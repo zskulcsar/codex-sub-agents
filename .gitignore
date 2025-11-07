@@ -4,4 +4,6 @@
 .codex
 .docs
 *.egg-info
+build
 dist
+node_modules

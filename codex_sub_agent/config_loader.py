@@ -25,6 +25,7 @@ class AgentSettings(BaseModel):
     entry_message: str
     temperature: float | None = Field(default=None)
     reasoning_tokens: int | None = Field(default=None)
+    mcp_servers: list[str] = Field(default_factory=list)
 
 
 class MCPStdioConfig(BaseModel):

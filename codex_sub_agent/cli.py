@@ -1,74 +1,212 @@
-"""Command-line entry point for the Codex sub-agent orchestrator."""
+"""Command-line entry point and MCP server implementation for Codex sub-agents."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
+import re
+from typing import Any, Dict, Iterable, List
 
-from agents import Agent, ModelSettings, Runner, set_default_openai_api, set_default_openai_key
+from agents import Agent, ModelSettings, RunResult, Runner, set_default_openai_api, set_default_openai_key
 from agents.mcp import MCPServer, MCPServerStdio, MCPServerStdioParams, MCPServerStreamableHttp, MCPServerStreamableHttpParams
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+import mcp.types as mcp_types
 
+from . import __version__
 from .config_loader import AgentSettings, InvalidConfiguration, MCPHttpConfig, MCPStdioConfig, SubAgentConfig, load_config
+
+AGENT_TOOL_INPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "request": {
+            "type": "string",
+            "description": "Optional override for the agent's entry message.",
+        },
+    },
+    "additionalProperties": False,
+}
+
+
+@dataclass(frozen=True)
+class AgentBlueprint:
+    """Immutable recipe for constructing an Agents SDK Agent."""
+
+    agent_id: str
+    settings: AgentSettings
+    mcp_server_names: List[str]
+
+    def build_agent(self, mcp_servers: Iterable[MCPServer]) -> Agent[Any]:
+        model_settings = ModelSettings()
+        if self.settings.temperature is not None:
+            model_settings.temperature = self.settings.temperature
+        if self.settings.reasoning_tokens:
+            model_settings.max_tokens = self.settings.reasoning_tokens
+
+        return Agent(
+            name=self.settings.name,
+            instructions=self.settings.instructions,
+            model=self.settings.model,
+            model_settings=model_settings,
+            mcp_servers=list(mcp_servers),
+        )
+
+
+@dataclass(frozen=True)
+class AgentAliasEntry:
+    alias: str
+    tool_name: str
+    blueprint: AgentBlueprint
+    description: str
+    expose_in_tools: bool = True
+
+
+class AgentRegistry:
+    """Holds the configured agents and exposes aliases for MCP tools and CLI use."""
+
+    def __init__(self, config: SubAgentConfig):
+        self.config = config
+        agents = config.available_agents()
+        self._blueprints: Dict[str, AgentBlueprint] = {
+            agent_id: AgentBlueprint(
+                agent_id=agent_id,
+                settings=settings,
+                mcp_server_names=list(settings.mcp_servers),
+            )
+            for agent_id, settings in agents.items()
+        }
+
+        if not config.aliases:
+            raise InvalidConfiguration("No aliases defined in [aliases]. At least one alias is required.")
+
+        self.tool_entries: Dict[str, AgentAliasEntry] = {}
+        self.aliases_by_agent: Dict[str, List[str]] = {agent_id: [] for agent_id in agents}
+        used_tool_names: set[str] = set()
+
+        for alias, agent_id in config.aliases.items():
+            blueprint = self._blueprints.get(agent_id)
+            if blueprint is None:
+                raise InvalidConfiguration(f"Alias '{alias}' references unknown agent '{agent_id}'.")
+            tool_name = self._make_tool_name(alias, used_tool_names)
+            used_tool_names.add(tool_name)
+            entry = AgentAliasEntry(
+                alias=alias,
+                tool_name=tool_name,
+                blueprint=blueprint,
+                description=self._summarize_agent(blueprint),
+                expose_in_tools=True,
+            )
+            self.tool_entries[tool_name] = entry
+            self.aliases_by_agent[agent_id].append(alias)
+
+        self.cli_aliases: Dict[str, AgentAliasEntry] = {}
+        for entry in self.tool_entries.values():
+            self.cli_aliases[entry.alias] = entry
+            self.cli_aliases[entry.tool_name] = entry
+
+        for agent_id, blueprint in self._blueprints.items():
+            if agent_id not in self.cli_aliases:
+                fallback_tool = self._make_tool_name(agent_id, used_tool_names)
+                entry = AgentAliasEntry(
+                    alias=agent_id,
+                    tool_name=fallback_tool,
+                    blueprint=blueprint,
+                    description=self._summarize_agent(blueprint),
+                    expose_in_tools=False,
+                )
+                self.cli_aliases[agent_id] = entry
+                self.cli_aliases[fallback_tool] = entry
+
+        self.tool_definitions: List[mcp_types.Tool] = [
+            mcp_types.Tool(
+                name=entry.tool_name,
+                description=entry.description,
+                inputSchema=AGENT_TOOL_INPUT_SCHEMA,
+            )
+            for entry in sorted(self.tool_entries.values(), key=lambda e: e.tool_name)
+        ]
+
+    def resolve_tool_name(self, tool_name: str) -> AgentAliasEntry:
+        if tool_name not in self.tool_entries:
+            raise InvalidConfiguration(f"Unknown tool '{tool_name}'.")
+        return self.tool_entries[tool_name]
+
+    def resolve_cli_alias(self, alias: str) -> AgentAliasEntry:
+        if alias not in self.cli_aliases:
+            raise InvalidConfiguration(f"Unknown agent '{alias}'. Available: {', '.join(sorted(self.cli_aliases))}")
+        return self.cli_aliases[alias]
+
+    def iter_agent_summaries(self) -> Iterable[tuple[str, AgentSettings, List[str]]]:
+        for agent_id, blueprint in sorted(self._blueprints.items()):
+            yield agent_id, blueprint.settings, sorted(self.aliases_by_agent.get(agent_id, []))
+
+    @staticmethod
+    def _summarize_agent(blueprint: AgentBlueprint) -> str:
+        primary_line = blueprint.settings.instructions.strip().splitlines()[0].strip()
+        if len(primary_line) > 200:
+            primary_line = primary_line[:197].rstrip() + "..."
+        return f"{blueprint.settings.name}: {primary_line}"
+
+    @staticmethod
+    def _make_tool_name(alias: str, used: set[str]) -> str:
+        sanitized = re.sub(r"[^A-Za-z0-9_-]", "_", alias)
+        sanitized = sanitized.strip("_") or "agent"
+        candidate = sanitized
+        index = 2
+        while candidate in used:
+            candidate = f"{sanitized}_{index}"
+            index += 1
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", candidate):
+            raise InvalidConfiguration(f"Cannot derive a valid tool name from alias '{alias}'.")
+        return candidate
 
 
 def _default_config_path() -> Path | None:
-    """Return the packaged config path if it exists alongside the module."""
-
     candidate = Path(__file__).resolve().parent.parent / "config" / "codex_sub_agents.toml"
     return candidate if candidate.exists() else None
 
 
-def build_arg_parser() -> argparse.ArgumentParser:
-    """Create the CLI argument parser with all supported flags."""
-
+def build_main_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="codex-sub-agent",
-        description="Launch the Codex CLI sub-agent described in the configuration file.",
+        description="Expose configured Codex workflows as an MCP server.",
     )
-    default_config = _default_config_path()
     parser.add_argument(
         "--config",
         type=Path,
-        default=default_config,
-        help="Path to the TOML configuration file describing the agent task.",
+        default=_default_config_path(),
+        help="Path to codex_sub_agents.toml (defaults to the packaged config).",
+    )
+    parser.add_argument(
+        "--run-agent",
+        dest="run_agent",
+        type=str,
+        help="Execute a specific agent (by alias or agent id) locally and exit.",
     )
     parser.add_argument(
         "--request",
         type=str,
         default=None,
-        help="Override the entry message defined in the configuration file.",
-    )
-    parser.add_argument(
-        "--agent",
-        dest="agent_id",
-        type=str,
-        default=None,
-        help="Identifier of the sub-agent to run (as defined in the configuration file).",
+        help="Override the entry message when using --run-agent.",
     )
     parser.add_argument(
         "--list-agents",
         action="store_true",
-        help="List all available agent identifiers in the configuration and exit.",
-    )
-    parser.add_argument(
-        "--print-config",
-        action="store_true",
-        help="Print the resolved configuration and exit.",
+        help="Print the configured agents and aliases, then exit.",
     )
     return parser
 
 
 def build_configure_parser() -> argparse.ArgumentParser:
-    """Parser for the ``configure`` helper command."""
-
     parser = argparse.ArgumentParser(
         prog="codex-sub-agent configure",
-        description="Add the codex-sub-agent MCP stanza to the local .codex/config.toml file.",
+        description="Add the codex-sub-agent MCP stanza to ./.codex/config.toml.",
     )
     parser.add_argument(
         "--config",
@@ -80,30 +218,26 @@ def build_configure_parser() -> argparse.ArgumentParser:
         "--codex-config",
         type=Path,
         default=Path.cwd() / ".codex" / "config.toml",
-        help="Path to the Codex config file to update (default: ./.codex/config.toml).",
+        help="Path to the Codex config file (default: ./.codex/config.toml).",
     )
     return parser
 
 
-async def initialize_mcp_servers(config: SubAgentConfig) -> tuple[Dict[str, MCPServer], AsyncExitStack]:
-    """Start all configured MCP servers and return them alongside an exit stack.
-
-    Args:
-        config: Hydrated configuration describing the desired MCP servers.
-
-    Returns:
-        A tuple containing a mapping of server names to active MCP server instances
-        and the :class:`AsyncExitStack` responsible for shutting them down.
-
-    Raises:
-        RuntimeError: If required environment variables for an MCP server are missing.
-    """
-
+async def initialize_mcp_servers(
+    config: SubAgentConfig,
+    server_names: Iterable[str],
+) -> tuple[Dict[str, MCPServer], AsyncExitStack]:
     servers: Dict[str, MCPServer] = {}
     exit_stack = AsyncExitStack()
     await exit_stack.__aenter__()
 
-    for name, server_config in config.mcp_servers.items():
+    unique_names = list(dict.fromkeys(server_names))
+
+    for name in unique_names:
+        server_config = config.mcp_servers.get(name)
+        if server_config is None:
+            await exit_stack.aclose()
+            raise InvalidConfiguration(f"Agent references unknown MCP server '{name}'.")
         server: MCPServer
         if isinstance(server_config, MCPStdioConfig):
             stdio_params: MCPServerStdioParams = {"command": server_config.command}
@@ -128,16 +262,16 @@ async def initialize_mcp_servers(config: SubAgentConfig) -> tuple[Dict[str, MCPS
                     )
                 headers.setdefault("Authorization", f"Bearer {token}")
 
-            http_params: MCPServerStreamableHttpParams = {"url": server_config.url}
+            stream_params: MCPServerStreamableHttpParams = {"url": server_config.url}
             if headers:
-                http_params["headers"] = headers
+                stream_params["headers"] = headers
 
             server = MCPServerStreamableHttp(
-                params=http_params,
+                params=stream_params,
                 name=server_config.name,
                 client_session_timeout_seconds=server_config.client_session_timeout_seconds,
             )
-        else:  # pragma: no cover - defensive
+        else:  # pragma: no cover
             raise RuntimeError(f"Unsupported MCP server type for {name}")
 
         servers[name] = await exit_stack.enter_async_context(server)
@@ -145,67 +279,89 @@ async def initialize_mcp_servers(config: SubAgentConfig) -> tuple[Dict[str, MCPS
     return servers, exit_stack
 
 
-async def run_agent(
+async def run_agent_workflow(
+    alias_entry: AgentAliasEntry,
     config: SubAgentConfig,
-    agent_settings: AgentSettings,
-    agent_id: str,
-    request: str | None,
-    display_label: str,
-) -> None:
-    """Run a single sub-agent workflow to completion.
-
-    Args:
-        config: Shared configuration containing OpenAI credentials and MCP servers.
-        agent_settings: Specific agent configuration (instructions, model settings).
-        agent_id: Canonical identifier for the agent being run.
-        request: Optional override for the agent's entry message.
-        display_label: Identifier or alias used to launch the agent (for logging).
-
-    Raises:
-        RuntimeError: If required environment variables such as ``OPENAI_API_KEY`` are
-            missing.
-    """
-
-    api_key = os.environ.get(config.openai.api_key_env_var)
-    if not api_key:
-        raise RuntimeError(
-            f"Missing environment variable {config.openai.api_key_env_var}. "
-            "Set it before launching the sub-agent."
-        )
-
-    set_default_openai_key(api_key)
-    set_default_openai_api(config.openai.default_api)
-
-    servers, exit_stack = await initialize_mcp_servers(config)
+    requested_prompt: str | None,
+) -> RunResult:
+    servers, exit_stack = await initialize_mcp_servers(config, alias_entry.blueprint.mcp_server_names)
     try:
-        model_settings = ModelSettings()
-        if agent_settings.temperature is not None:
-            model_settings.temperature = agent_settings.temperature
-        if agent_settings.reasoning_tokens:
-            model_settings.max_tokens = agent_settings.reasoning_tokens
-
-        agent = Agent(
-            name=agent_settings.name,
-            instructions=agent_settings.instructions,
-            model=agent_settings.model,
-            mcp_servers=list(servers.values()),
-            model_settings=model_settings,
-        )
-
-        entry = request or agent_settings.entry_message
-        result = await Runner.run(agent, entry)
-        last_agent = result.last_agent.name if result.last_agent else agent_settings.name
-        suffix = f" (alias: {display_label})" if display_label != agent_id else ""
-        print(
-            f"[codex-sub-agent] Agent '{agent_id}'{suffix} run completed. Last agent: {last_agent}"
-        )
+        agent = alias_entry.blueprint.build_agent(list(servers.values()))
+        entry = requested_prompt or alias_entry.blueprint.settings.entry_message
+        return await Runner.run(agent, entry)
     finally:
         await exit_stack.aclose()
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point compatible with ``python -m codex_sub_agent.cli``."""
+def format_run_result(alias_entry: AgentAliasEntry, result: RunResult) -> str:
+    final_output = getattr(result, "final_output", None)
+    if isinstance(final_output, str) and final_output.strip():
+        return final_output
+    if final_output:
+        try:
+            return json.dumps(final_output, indent=2, default=str)
+        except Exception:  # pragma: no cover - best effort
+            return str(final_output)
 
+    last_agent = getattr(result, "last_agent", None)
+    last_agent_name = last_agent.name if last_agent else alias_entry.blueprint.settings.name
+    return f"Agent '{alias_entry.alias}' completed via {last_agent_name}, but no final output was produced."
+
+
+async def serve(config: SubAgentConfig, registry: AgentRegistry) -> int:
+    server = Server(
+        "codex-sub-agent",
+        version=__version__,
+        instructions="Codex sub-agent server that exposes configured workflows as MCP tools.",
+    )
+    tool_lock = asyncio.Lock()
+
+    @server.list_tools()
+    async def handle_list_tools() -> mcp_types.ListToolsResult:
+        return mcp_types.ListToolsResult(tools=registry.tool_definitions)
+
+    @server.call_tool()
+    async def handle_call_tool(tool_name: str, arguments: Dict[str, Any]):
+        async with tool_lock:
+            entry = registry.resolve_tool_name(tool_name)
+            request_override = None
+            if arguments:
+                maybe_request = arguments.get("request")
+                if maybe_request is not None and not isinstance(maybe_request, str):
+                    raise ValueError("The 'request' argument must be a string when provided.")
+                request_override = maybe_request
+            try:
+                run_result = await run_agent_workflow(entry, registry.config, request_override)
+                text = format_run_result(entry, run_result)
+                return mcp_types.CallToolResult(
+                    content=[mcp_types.TextContent(type="text", text=text)],
+                    isError=False,
+                )
+            except Exception as exc:  # pragma: no cover - surfaced to MCP client
+                return mcp_types.CallToolResult(
+                    content=[mcp_types.TextContent(type="text", text=f"Agent '{entry.alias}' failed: {exc}")],
+                    isError=True,
+                )
+
+    async with stdio_server() as (read_stream, write_stream):
+        initialization = server.create_initialization_options()
+        await server.run(read_stream, write_stream, initialization)
+
+    return 0
+
+
+def ensure_openai_setup(config: SubAgentConfig) -> None:
+    api_key = os.environ.get(config.openai.api_key_env_var)
+    if not api_key:
+        raise RuntimeError(
+            f"Missing environment variable {config.openai.api_key_env_var}. "
+            "Set it before launching codex-sub-agent."
+        )
+    set_default_openai_key(api_key)
+    set_default_openai_api(config.openai.default_api)
+
+
+def main(argv: list[str] | None = None) -> int:
     argv = argv or sys.argv[1:]
 
     if argv and argv[0] == "configure":
@@ -213,64 +369,63 @@ def main(argv: list[str] | None = None) -> int:
         args = config_parser.parse_args(argv[1:])
         return configure_codex(args.config, args.codex_config)
 
-    parser = build_arg_parser()
+    parser = build_main_parser()
     args = parser.parse_args(argv)
 
-    try:
-        if args.config is None:
-            parser.error(
-                "No configuration file supplied. Pass --config with the path to "
-                "codex_sub_agents.toml."
-            )
-        if not args.config.exists():
-            parser.error(f"Configuration file not found: {args.config}")
+    if args.config is None:
+        parser.error(
+            "No configuration file supplied. Pass --config with the path to codex_sub_agents.toml."
+        )
 
-        config = load_config(args.config)
+    config_path = args.config.expanduser()
+    if not config_path.exists():
+        parser.error(f"Configuration file not found: {config_path}")
+
+    try:
+        config = load_config(config_path)
+        registry = AgentRegistry(config)
     except InvalidConfiguration as exc:
         parser.error(str(exc))
-
-    if args.print_config:
-        print(config.model_dump_json(indent=2))
-        return 0
 
     if args.list_agents:
-        try:
-            agents = config.available_agents()
-        except InvalidConfiguration as exc:
-            parser.error(str(exc))
-        alias_index: Dict[str, list[str]] = {}
-        for alias, target in config.aliases.items():
-            alias_index.setdefault(target, []).append(alias)
-        for key, value in sorted(agents.items()):
-            aliases = ", ".join(sorted(alias_index.get(key, [])))
-            if aliases:
-                print(f"{key}: {value.name} (model={value.model}) aliases=[{aliases}]")
-            else:
-                print(f"{key}: {value.name} (model={value.model})")
+        for agent_id, settings, aliases in registry.iter_agent_summaries():
+            alias_render: List[str] = []
+            for alias in aliases:
+                entry = registry.cli_aliases.get(alias)
+                if entry and entry.expose_in_tools:
+                    alias_render.append(f"{alias} (tool {entry.tool_name})")
+                else:
+                    alias_render.append(alias)
+            alias_text = f" aliases={alias_render}" if alias_render else ""
+            print(f"{agent_id}: {settings.name}{alias_text}")
         return 0
 
-    try:
-        resolved_agent_id, agent_settings = config.resolve_agent(args.agent_id)
-    except InvalidConfiguration as exc:
-        parser.error(str(exc))
+    if args.run_agent:
+        try:
+            entry = registry.resolve_cli_alias(args.run_agent)
+        except InvalidConfiguration as exc:
+            parser.error(str(exc))
+        ensure_openai_setup(config)
+        try:
+            run_result = asyncio.run(run_agent_workflow(entry, config, args.request))
+            print(format_run_result(entry, run_result))
+            return 0
+        except Exception as exc:  # pragma: no cover - CLI surface
+            print(f"codex-sub-agent failed: {exc}", file=sys.stderr)
+            return 1
 
+    ensure_openai_setup(config)
     try:
-        display_label = args.agent_id or resolved_agent_id
-        asyncio.run(run_agent(config, agent_settings, resolved_agent_id, args.request, display_label))
-    except Exception as exc:  # pragma: no cover - CLI surface
+        asyncio.run(serve(config, registry))
+        return 0
+    except KeyboardInterrupt:
+        return 0
+    except Exception as exc:  # pragma: no cover - MCP surface
         print(f"codex-sub-agent failed: {exc}", file=sys.stderr)
         return 1
 
-    return 0
-
-
-if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())
-
 
 def configure_codex(config_path: Path, codex_config_path: Path) -> int:
-    """Insert the codex-sub-agent stanza into the Codex CLI configuration file."""
-
     config_path = config_path.expanduser().resolve()
     if not config_path.exists():
         print(f"Configuration file not found: {config_path}", file=sys.stderr)
@@ -300,3 +455,7 @@ def configure_codex(config_path: Path, codex_config_path: Path) -> int:
 
     print(f"Added codex_sub_agent MCP server configuration to {codex_config_path}")
     return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

@@ -3,7 +3,6 @@ id = "workflow"
 [agent]
 name = "Codex Workflow Sub-Agent"
 model = "gpt-5"
-temperature = 0.1
 reasoning_tokens = 4096
 instructions = """
 You are the Codex Workflow Sub-Agent. Drive a repeatable engineering workflow by coordinating the Codex CLI MCP server for workspace edits, the Context7 MCP server for dependency documentation, and the GitHub MCP server for repository automation.
@@ -29,3 +28,4 @@ Constraints:
 - Never write outside the repository workspace.
 - Prefer automated checks or tests exposed in the repository (via Codex) before marking the task complete.
 """
+mcp_servers = ["codex", "context7", "github"]

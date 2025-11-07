@@ -14,19 +14,5 @@ default_api = "responses"
 type = "stdio"
 name = "Codex CLI"
 command = "npx"
-args = ["-y", "codex", "mcp"]
+args = ["-y", "codex", "mcp-server"]
 client_session_timeout_seconds = 360000
-
-[mcp_servers.context7]
-type = "stdio"
-name = "Context7 Documentation"
-command = "npx"
-args = ["-y", "@upstash/context7-mcp"]
-client_session_timeout_seconds = 60
-
-[mcp_servers.github]
-type = "http"
-name = "GitHub"
-url = "https://api.githubcopilot.com/mcp"
-bearer_token_env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
-client_session_timeout_seconds = 60

@@ -9,27 +9,15 @@ import pytest
 from codex_sub_agent import cli
 
 
-def invoke_cli(config_path: Path, *args: str) -> int:
-    """Invoke the CLI entry point with the provided arguments."""
+def test_cli_lists_agents(sample_config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """The --list-agents flag should enumerate configured aliases."""
 
-    argv = ["--config", str(config_path), *args]
-    return cli.main(argv)
-
-
-def test_cli_lists_agents(sample_config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The --list-agents flag should exit successfully."""
-
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    exit_code = invoke_cli(sample_config_dir / "codex_sub_agents.toml", "--list-agents")
+    exit_code = cli.main(["--config", str(sample_config_dir / "codex_sub_agents.toml"), "--list-agents"])
     assert exit_code == 0
-
-
-def test_cli_print_config(sample_config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The --print-config flag should also exit successfully."""
-
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    exit_code = invoke_cli(sample_config_dir / "codex_sub_agents.toml", "--print-config")
-    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "workflow" in output
+    assert "csa:test-agent" in output
+    assert "tool csa_test-agent" in output
 
 
 def test_configure_adds_stanza(sample_config_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -76,3 +64,31 @@ def test_configure_is_idempotent(sample_config_dir: Path, tmp_path: Path, capsys
 
     captured = capsys.readouterr()
     assert "already contains the codex_sub_agent stanza" in captured.out
+
+
+def test_run_agent_flag_invokes_alias(sample_config_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """--run-agent executes a single agent using the shared workflow helper."""
+
+    async def fake_run_agent(alias_entry, config, request):
+        class DummyResult:
+            final_output = f"{alias_entry.alias}|{request or 'default'}"
+            last_agent = None
+
+        return DummyResult()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(cli, "run_agent_workflow", fake_run_agent)
+
+    exit_code = cli.main(
+        [
+            "--config",
+            str(sample_config_dir / "codex_sub_agents.toml"),
+            "--run-agent",
+            "csa:test-agent",
+            "--request",
+            "Focus on docs",
+        ]
+    )
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "csa:test-agent|Focus on docs" in output

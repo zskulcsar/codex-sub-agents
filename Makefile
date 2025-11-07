@@ -45,7 +45,7 @@ test: venv
 	.venv/bin/pytest tests
 
 install:
-	python3 -m pip install --user --upgrade .
+	python3 -m pip install --upgrade .
 
 clean:
 	rm -rf .venv build dist *.egg-info

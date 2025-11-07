@@ -13,12 +13,11 @@ uv pip install --system .
 
 Copy the configuration bundle from the project’s root `config/` directory to your preferred location (for example `~/.config/codex/`), then adjust paths as needed:
 
-- `codex_sub_agents.toml` defines shared OpenAI/MCP settings and references each agent via `agent_files`.
-- `agents/workflow.toml` – general-purpose engineering workflow (set as the default agent).
-- `agents/security_review.toml` – security auditor that documents findings in `SECURITY_REVIEW.md` and raises follow-up GitHub issues when needed.
-- `agents/test_agent.toml` – lightweight smoke-test agent that simply confirms the configuration is wired up.
+- `codex_sub_agents.toml` defines shared OpenAI settings, the `[aliases]` map, and any reusable MCP server definitions (Codex wrapper, GitHub, Context7, etc.). The `[mcp_servers.*]` section is optional—declare only the servers you plan to reference from agents.
+- Each `agents/<name>.toml` file describes a workflow and lists the MCP servers it needs via a `mcp_servers = ["codex", ...]` array. Servers not referenced will never be launched, so agents explicitly opt into the capabilities they require.
 
 Paths listed under `agent_files` are resolved relative to the main TOML file, so moving the folder together keeps references intact. Add or remove agent files by editing that list; each agent file must declare an `id` plus an `[agent]` table with the usual fields (instructions, entry_message, etc.).
+When an agent lists a server in `mcp_servers`, the runtime verifies that an entry exists under `[mcp_servers.<name>]` before launching the workflow so typos are caught up front.
 
 Expose stable mentions via the `[aliases]` table so Codex users can call agents by name:
 
@@ -30,6 +29,10 @@ Expose stable mentions via the `[aliases]` table so Codex users can call agents 
 ```
 
 Inside Codex, run `agent csa:default`, `agent csa:test-agent`, or `agent csa:security` to dispatch the matching sub-agent without remembering internal IDs.
+
+The `codex-sub-agent-codex-mcp` helper (installed with this package) starts `npx codex mcp-server` and silently drops Codex-specific `codex/event` notifications so the MCP client stays quiet. The default config already points to this helper; customize the `command` or add arguments if you need extra flags.
+
+> MCP tool names may only contain `[A-Za-z0-9_-]`, so when Codex lists tools it replaces punctuation in the alias (for example `csa:test-agent` → `csa_test-agent`). Use the sanitized name inside Codex (`agent csa_test-agent`), but the CLI always accepts the original alias (`--run-agent csa:test-agent`).
 
 Once the configuration bundle is in place, register the MCP server automatically:
 
@@ -66,23 +69,23 @@ Once registered you can call the agent from the Codex CLI (or other MCP-aware cl
    ```
 2. Run the test agent to validate installation:
    ```bash
-   codex-sub-agent --config ~/.config/codex/codex_sub_agents.toml --agent test_agent
+   codex-sub-agent --config ~/.config/codex/codex_sub_agents.toml --run-agent csa:test-agent
    ```
    You should see `Codex sub-agent configuration is correct. You can now use sub agents!`
-   (Inside an interactive Codex session, invoke `agent csa:test-agent` to trigger the same check.)
+   (Inside an interactive Codex session, invoke `agent csa_test-agent` — alias `csa:test-agent` — to trigger the same check.)
 3. Run the default workflow agent (explicit):
    ```bash
-   codex-sub-agent --config ~/.config/codex/codex_sub_agents.toml --agent workflow
+   codex-sub-agent --config ~/.config/codex/codex_sub_agents.toml --run-agent workflow
    ```
-   Equivalent Codex mention: `agent csa:default`
+   Equivalent Codex mention: `agent csa_default` (alias `csa:default`)
 4. Run the security review agent with a custom kickoff request:
    ```bash
    codex-sub-agent \
      --config ~/.config/codex/codex_sub_agents.toml \
-     --agent security_review \
+     --run-agent csa:security \
      --request "Focus on the oauth-service package and razorpay integration."
    ```
-   Equivalent Codex mention: `agent csa:security`
+   Equivalent Codex mention: `agent csa_security` (alias `csa:security`)
 
 If you omit `--agent`, the CLI will choose the `default_agent` specified in the configuration file.
 
