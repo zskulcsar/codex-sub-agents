@@ -13,6 +13,7 @@ authors = [
 ]
 license = { text = "MIT" }
 dependencies = [
+  "mcp>=1.20.0",
   "openai>=2.7.0",
   "openai-agents>=0.5.0",
   "pydantic>=2.12.0",
@@ -26,6 +27,15 @@ codex-sub-agent = "codex_sub_agent.cli:main"
 Homepage = "https://github.com/example/codex-sub-agent"
 Source = "https://github.com/example/codex-sub-agent"
 Documentation = "https://github.com/example/codex-sub-agent"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "mypy>=1.8.0",
+  "pdoc>=14.4.0",
+  "pytest>=8.2.0",
+  "ruff>=0.6.0",
+]
 
 [tool.setuptools]
 packages = ["codex_sub_agent"]

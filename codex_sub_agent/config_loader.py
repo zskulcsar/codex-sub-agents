@@ -61,7 +61,7 @@ class SubAgentConfig(BaseModel):
     agents: Dict[str, AgentSettings] = Field(default_factory=dict)
     default_agent_id: str | None = None
     aliases: Dict[str, str] = Field(default_factory=dict)
-    mcp_servers: Dict[str, MCPConfig]
+    mcp_servers: Dict[str, MCPConfig] = Field(default_factory=dict)
 
     model_config = {"use_enum_values": True, "populate_by_name": True}
 
@@ -196,6 +196,13 @@ def load_config(config_path: Path) -> SubAgentConfig:
         payload["default_agent_id"] = payload["default_agent"]
 
     try:
-        return SubAgentConfig.model_validate(payload)
+        cfg = SubAgentConfig.model_validate(payload)
     except ValidationError as exc:
         raise InvalidConfiguration(f"Invalid configuration: {exc}") from exc
+
+    if "codex" not in cfg.mcp_servers:
+        raise InvalidConfiguration(
+            "Missing required MCP server 'codex'. Add `[mcp_servers.codex]` to codex_sub_agents.toml."
+        )
+
+    return cfg
