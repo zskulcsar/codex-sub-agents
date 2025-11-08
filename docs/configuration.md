@@ -95,4 +95,8 @@ Key tips:
    ```
 3. Launch Codex CLI and ensure the new tool appears under `list_tools`.
 
+## Environment variables
+
+If `OPENAI_API_KEY` (or other required secrets) are not already set when the CLI starts, it will look for a `.envrc` in the current working directory and source it via `bash`. This mirrors the way you might manage credentials locally and keeps secrets out of `.codex/config.toml`. Any value already present in the environment takes precedence.
+
 If anything fails, see `troubleshooting.md` for targeted fixes.

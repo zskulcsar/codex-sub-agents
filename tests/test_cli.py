@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 import pytest
 
 from codex_sub_agent import cli
+from codex_sub_agent.config_loader import load_config
 
 
 def test_cli_lists_agents(sample_config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -92,3 +94,57 @@ def test_run_agent_flag_invokes_alias(sample_config_dir: Path, monkeypatch: pyte
     assert exit_code == 0
     output = capsys.readouterr().out
     assert "csa:test-agent|Focus on docs" in output
+
+
+def test_envrc_in_current_directory_supplies_missing_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """When OPENAI_API_KEY is missing, .envrc in CWD is sourced."""
+
+    envrc = tmp_path / ".envrc"
+    envrc.write_text('export OPENAI_API_KEY="from-envrc"\n', encoding="utf-8")
+    config_path = tmp_path / "config" / "codex_sub_agents.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        """
+agent_files = []
+
+[mcp_servers.codex]
+type = "stdio"
+name = "Codex CLI"
+command = "npx"
+client_session_timeout_seconds = 60
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    cli._populate_env_from_envrc(load_config(config_path))
+    assert os.environ["OPENAI_API_KEY"] == "from-envrc"
+
+
+def test_envrc_does_not_override_existing_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """If OPENAI_API_KEY is already set, .envrc is ignored."""
+
+    envrc = tmp_path / ".envrc"
+    envrc.write_text('export OPENAI_API_KEY="from-envrc"\n', encoding="utf-8")
+    config_path = tmp_path / "config" / "codex_sub_agents.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        """
+agent_files = []
+
+[mcp_servers.codex]
+type = "stdio"
+name = "Codex CLI"
+command = "npx"
+client_session_timeout_seconds = 60
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "preexisting")
+
+    cli._populate_env_from_envrc(load_config(config_path))
+    assert os.environ["OPENAI_API_KEY"] == "preexisting"

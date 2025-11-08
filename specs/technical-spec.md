@@ -32,6 +32,7 @@ External dependencies: OpenAI API (Responses), Context7 MCP, GitHub MCP, and Cod
   - HTTP: `type`, `name`, `url`, optional `headers`, `bearer_token_env_var`, timeout.
 - **Agents:** `id`, `name`, `model`, `temperature`, `reasoning_tokens`, `instructions`, `entry_message`, `mcp_servers`. Metadata lives in `agent.toml`; textual fields are sourced from Markdown files sitting next to it.
 - **Aliases:** map of user-facing names to agent IDs; tool names are sanitized versions (non-alphanumeric replaced with `_`).
+- **Environment sourcing:** before validating credentials, the CLI looks for `.envrc` in the current working directory and sources it with `bash` so missing variables like `OPENAI_API_KEY` are populated. Existing process values take precedence.
 
 ## Error Handling & Observability
 - Missing env vars raise `RuntimeError` with clear messaging before touching the network.

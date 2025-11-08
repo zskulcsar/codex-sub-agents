@@ -11,6 +11,7 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import subprocess
 from typing import Any, Dict, Iterable, List
 
 from agents import Agent, ModelSettings, RunResult, Runner, set_default_openai_api, set_default_openai_key
@@ -462,6 +463,50 @@ async def serve(config: SubAgentConfig, registry: AgentRegistry) -> int:
     return 0
 
 
+def _load_env_file(env_file: Path) -> Dict[str, str]:
+    """Source a shell-compatible env file and capture resulting environment."""
+
+    command = [
+        "bash",
+        "-lc",
+        f'set -a && source "{env_file}" >/dev/null && env -0',
+    ]
+    try:
+        result = subprocess.run(command, check=True, capture_output=True)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"Failed to source {env_file}: {exc.stderr.decode().strip()}") from exc
+
+    env_map: Dict[str, str] = {}
+    for chunk in result.stdout.split(b"\x00"):
+        if not chunk:
+            continue
+        key, _, value = chunk.partition(b"=")
+        env_map[key.decode()] = value.decode()
+    return env_map
+
+
+def _populate_env_from_envrc(config: SubAgentConfig) -> None:
+    """Ensure required env vars are populated by sourcing .envrc if necessary."""
+
+    required: list[str] = []
+    if config.openai.api_key_env_var:
+        required.append(config.openai.api_key_env_var)
+
+    missing = [var for var in required if var and not os.environ.get(var)]
+    if not missing:
+        return
+
+    envrc_path = Path.cwd() / ".envrc"
+    if not envrc_path.exists():
+        return
+
+    env_map = _load_env_file(envrc_path)
+    for var in missing:
+        value = env_map.get(var)
+        if value:
+            os.environ[var] = value
+
+
 def ensure_openai_setup(config: SubAgentConfig) -> None:
     """Validate and configure shared OpenAI credentials for the Agents SDK.
 
@@ -511,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = load_config(config_path)
+        _populate_env_from_envrc(config)
         registry = AgentRegistry(config)
     except InvalidConfiguration as exc:
         parser.error(str(exc))

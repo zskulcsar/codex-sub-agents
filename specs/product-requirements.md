@@ -19,6 +19,7 @@ Codex Sub-Agent packages reusable MCP workflows so engineers can install Codex C
 - **B1:** As a staff developer, I need a schema reference for MCP servers so that I can add new entries safely. _Acceptance:_ configuration doc lists required keys, defaults, and validation tips.
 - **B2:** As the developer, I need alias/tool guidance so that Codex users see stable tool names. _Acceptance:_ documentation explains alias-to-tool sanitization and the per-agent directory structure (`agent.toml`, Markdown instructions/entry).
 - **D1:** As a support engineer, I need symptom-based troubleshooting so that I can map errors to fixes quickly. _Acceptance:_ troubleshooting doc includes missing env vars, MCP timeouts, GitHub auth, and Codex-specific noise.
+- **D2:** As the same engineer, I need a safe way to load secrets without editing `.codex/config.toml`. _Acceptance:_ CLI documents that it sources `.envrc` in the working directory (bash) before checking for required env vars.
 
 ## Success Metrics
 - < 10% of new installs require human support.

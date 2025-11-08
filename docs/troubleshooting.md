@@ -5,7 +5,7 @@ Short answers to the most common errors. Each entry lists the symptom, likely ca
 ## Missing `OPENAI_API_KEY`
 - **Symptom:** CLI exits with `Missing environment variable OPENAI_API_KEY`.
 - **Cause:** Env var not exported or running under a different shell.
-- **Fix:** `export OPENAI_API_KEY=sk-...` (plus restart your terminal). On CI, add it to the job’s secret store.
+- **Fix:** `export OPENAI_API_KEY=sk-...` (plus restart your terminal) or add it to the repo’s `.envrc` so the CLI pulls it in automatically. On CI, add it to the job’s secret store.
 
 ## MCP Server Not Found
 - **Symptom:** `Agent references unknown MCP server 'context7'` during `--run-agent`.

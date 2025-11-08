@@ -47,6 +47,8 @@ Set the following environment variables so the agent can authenticate:
 - `OPENAI_API_KEY`
 - `GITHUB_PERSONAL_ACCESS_TOKEN` (if you want access to the GitHub MCP server)
 
+When the CLI starts, it looks for a `.envrc` in the current working directory (typically the repo root). If it finds one, it sources the file with `bash` and imports `OPENAI_API_KEY` only when it isn’t already set. This keeps secrets out of `.codex/config.toml` while still allowing the Codex sandbox to launch the agent with the right credentials.
+
 ## Registering with Codex CLI
 
 If you prefer to make the change manually, add the following stanza to `.codex/config.toml`:
