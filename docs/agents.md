@@ -36,7 +36,7 @@ config/agents/workflow/
       SKILL.md
 ```
 
-Every skill folder must contain a `SKILL.md` with YAML front matter followed by instructional text:
+Every skill folder must contain a `SKILL.md` with YAML front matter followed by instructional text. The loader (`codex_sub_agent.skill_loader`) converts this into `AgentSkill` objects that `codex_sub_agent.skills` later wrap as function tools:
 
 ```markdown
 ---
@@ -57,7 +57,7 @@ Rules worth remembering:
 
 ## How Skills Become Tools
 
-When the loader finds skills, it stores them on `AgentSettings.skills`. Later, `AgentBlueprint.build_agent` turns each skill into a function tool named `skill_<slug>` (sanitized from the folder name). The tool:
+When the loader finds skills, it stores them on `AgentSettings.skills`. Later, `AgentBlueprint.build_agent` turns each skill into a function tool named `skill_<slug>` (sanitized from the folder name) using the `skills.AgentSkill.build_tool` helper. The tool:
 
 - Accepts a single argument, `intent`, which can be `"preview"` (default) or `"full"`.
 - Returns JSON containing the manifest, a short preview excerpt, and attachment metadata. When `intent="full"`, the response also includes the complete instructions plus the textual contents of every attachment.

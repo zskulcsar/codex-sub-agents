@@ -12,7 +12,7 @@ Pick the scenario closest to your task and follow the numbered steps.
    [aliases]
    "csa:research" = "research_agent"
    ```
-5. Re-run `codex-sub-agent --list-agents` to confirm the alias and tool name.
+5. Re-run `codex-sub-agent --list-agents` to confirm the alias and tool name. Skills inside the new folder are parsed by `codex_sub_agent.skill_loader` and exposed as tools via `codex_sub_agent.skills`, so no extra wiring is required.
 
 ## Rotate GitHub Credentials
 
@@ -48,3 +48,12 @@ Capture stdout/stderr to logs when running inside CI.
 1. Delete the existing folder: `rm -rf ~/.config/codex/config ~/.config/codex/agents`.
 2. Copy the latest bundle from the repo.
 3. Rerun `codex-sub-agent configure --config <new path>` to ensure Codex CLI points to the updated files.
+
+## Running Tests
+
+- Full suite: `pytest`
+- Targeted helpers:
+  - `pytest tests/test_agent_runtime.py` (alias registry + blueprints)
+  - `pytest tests/test_config_models_unit.py` (Pydantic models/validation)
+  - `pytest tests/test_skill_loader.py tests/test_skills.py` (skill manifests + tool rendering)
+  - `pytest tests/test_mcp_server.py` (MCP orchestration, `run_agent_workflow`, and server initialization)
