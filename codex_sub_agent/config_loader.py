@@ -6,6 +6,8 @@ from typing import Literal
 import tomllib
 from pydantic import BaseModel, Field, ValidationError
 
+from .skills import AgentSkill, AgentSkillAttachment, render_skill_section
+
 
 class OpenAISettings(BaseModel):
     """OpenAI platform settings that apply to every sub-agent run."""
@@ -24,6 +26,7 @@ class AgentSettings(BaseModel):
     temperature: float | None = Field(default=None)
     reasoning_tokens: int | None = Field(default=None)
     mcp_servers: list[str] = Field(default_factory=list)
+    skills: list[AgentSkill] = Field(default_factory=list)
 
 
 class MCPStdioConfig(BaseModel):
@@ -144,6 +147,102 @@ def _normalize_mcp_servers(raw_value: object) -> list[str]:
     raise InvalidConfiguration("mcp_servers must be declared as a list of strings or a table of booleans.")
 
 
+def _strip_quotes(value: str) -> str:
+    value = value.strip()
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        return value[1:-1]
+    return value
+
+
+def _parse_skill_manifest(lines: list[str], skill_file: Path) -> dict[str, str]:
+    manifest: dict[str, str] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            raise InvalidConfiguration(
+                f"Skill file {skill_file} manifest lines must use 'key: value' syntax."
+            )
+        key, value = line.split(":", 1)
+        manifest[key.strip()] = _strip_quotes(value)
+
+    for required in ("name", "description"):
+        if not manifest.get(required):
+            raise InvalidConfiguration(
+                f"Skill file {skill_file} must declare '{required}' in the manifest."
+            )
+    return manifest
+
+
+def _split_skill_file(content: str, skill_file: Path) -> tuple[dict[str, str], str]:
+    text = content.lstrip()
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise InvalidConfiguration(
+            f"Skill file {skill_file} must begin with a frontmatter block delimited by '---'."
+        )
+
+    closing_index = None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            closing_index = index
+            break
+    if closing_index is None:
+        raise InvalidConfiguration(
+            f"Skill file {skill_file} frontmatter is missing a closing '---' delimiter."
+        )
+
+    manifest_lines = lines[1:closing_index]
+    manifest = _parse_skill_manifest(manifest_lines, skill_file)
+    body = "\n".join(lines[closing_index + 1 :]).strip()
+    if not body:
+        raise InvalidConfiguration(f"Skill file {skill_file} must include instructional content after the manifest.")
+    return manifest, body
+
+
+def _load_agent_skills(agent_path: Path) -> list[AgentSkill]:
+    skills_parent = agent_path / "skills"
+    if not skills_parent.is_dir():
+        return []
+
+    skills: list[AgentSkill] = []
+    for skill_dir in sorted(p for p in skills_parent.iterdir() if p.is_dir()):
+        skill_file = skill_dir / "SKILL.md"
+        try:
+            content = skill_file.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise InvalidConfiguration(f"Skill directory {skill_dir} is missing SKILL.md.") from exc
+
+        manifest, body = _split_skill_file(content, skill_file)
+        attachments: list[AgentSkillAttachment] = []
+        for candidate in sorted(path for path in skill_dir.rglob("*") if path.is_file()):
+            if candidate.name == "SKILL.md":
+                continue
+            rel_path = candidate.relative_to(skill_dir)
+            attachments.append(
+                AgentSkillAttachment(
+                    filename=candidate.name,
+                    relative_path=str(rel_path),
+                    absolute_path=candidate,
+                    size_bytes=candidate.stat().st_size,
+                )
+            )
+
+        skills.append(
+            AgentSkill(
+                slug=skill_dir.name,
+                name=manifest["name"],
+                description=manifest["description"],
+                instructions=body,
+                directory=skill_dir,
+                attachments=attachments,
+            )
+        )
+
+    return skills
+
+
 def load_config(config_path: Path) -> SubAgentConfig:
     """Load and validate a TOML configuration file.
 
@@ -216,7 +315,13 @@ def load_config(config_path: Path) -> SubAgentConfig:
                 )
             return content
 
-        agent_data["instructions"] = _load_markdown(instructions_path, "instructions")
+        instructions_text = _load_markdown(instructions_path, "instructions")
+        skills = _load_agent_skills(agent_path)
+        if skills:
+            instructions_text = instructions_text + render_skill_section(skills)
+
+        agent_data["skills"] = skills
+        agent_data["instructions"] = instructions_text
         agent_data["entry_message"] = _load_markdown(entry_path, "entry message")
 
         return agent_id, agent_data

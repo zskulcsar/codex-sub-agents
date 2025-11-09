@@ -12,9 +12,9 @@ import sys
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
-from agents import Agent, ModelSettings, RunResult, Runner, set_default_openai_api, set_default_openai_key
+from agents import Agent, ModelSettings, RunResult, Runner, Tool, set_default_openai_api, set_default_openai_key
 from agents.mcp import (
     MCPServer,
     MCPServerStdio,
@@ -65,11 +65,13 @@ class AgentBlueprint:
         if self.settings.reasoning_tokens:
             model_settings.max_tokens = self.settings.reasoning_tokens
 
+        tools: list[Tool] = [cast(Tool, skill.build_tool()) for skill in self.settings.skills]
         return Agent(
             name=self.settings.name,
             instructions=self.settings.instructions,
             model=self.settings.model,
             model_settings=model_settings,
+            tools=tools,
             mcp_servers=list(mcp_servers),
         )
 

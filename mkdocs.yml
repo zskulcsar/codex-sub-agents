@@ -7,6 +7,7 @@ nav:
   - Quickstart: quickstart.md
   - Installation: installation.md
   - Configuration: configuration.md
+  - Agents & Skills: agents.md
   - Troubleshooting: troubleshooting.md
   - How-To Guides: how-to-guides.md
 docs_dir: docs

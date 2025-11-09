@@ -3,10 +3,65 @@
 from pathlib import Path
 import os
 
+from agents.tool import FunctionTool
+
 import pytest
 
 from codex_sub_agent import cli
 from codex_sub_agent.config_loader import load_config
+
+
+def _write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _configure_agent_with_skill(tmp_path: Path) -> tuple[Path, cli.AgentBlueprint]:
+    config_root = tmp_path / "config"
+    agent_dir = config_root / "agents" / "demo"
+    skill_dir = agent_dir / "skills" / "deep_focus"
+
+    _write(
+        agent_dir / "agent.toml",
+        """
+id = "demo"
+
+[agent]
+name = "Demo Agent"
+mcp_servers = ["codex"]
+""",
+    )
+    _write(agent_dir / "instructions.md", "Primary instructions.")
+    _write(agent_dir / "entry_message.md", "Kick things off.")
+    _write(
+        skill_dir / "SKILL.md",
+        """---
+name: Deep Focus
+description: Stay on the main objective.
+---
+Always brainstorm before coding and confirm the plan with the user.
+""",
+    )
+    _write(skill_dir / "large_skill_file.md", "Long-form guidance.")
+
+    config_path = config_root / "codex_sub_agents.toml"
+    _write(
+        config_path,
+        """
+agent_files = ["agents/demo"]
+
+[mcp_servers.codex]
+type = "stdio"
+name = "Codex CLI"
+command = "npx"
+client_session_timeout_seconds = 60
+""",
+    )
+
+    config = load_config(config_path)
+    settings = config.available_agents()["demo"]
+    blueprint = cli.AgentBlueprint(agent_id="demo", settings=settings, mcp_server_names=[])
+    return config_path, blueprint
 
 
 def test_cli_lists_agents(sample_config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -148,3 +203,16 @@ client_session_timeout_seconds = 60
 
     cli._populate_env_from_envrc(load_config(config_path))
     assert os.environ["OPENAI_API_KEY"] == "preexisting"
+
+
+def test_agent_blueprint_builds_skill_tools(tmp_path: Path) -> None:
+    """Skill metadata results in registered function tools on the agent."""
+
+    _, blueprint = _configure_agent_with_skill(tmp_path)
+    agent = blueprint.build_agent(mcp_servers=[])
+
+    assert agent.tools, "Skill tool should be registered"
+    tool = agent.tools[0]
+    assert isinstance(tool, FunctionTool)
+    assert tool.name.startswith("skill_deep_focus")
+    assert "Deep Focus" in tool.description
