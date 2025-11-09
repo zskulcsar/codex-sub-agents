@@ -10,14 +10,14 @@ Each agent lives inside `config/agents/<agent-id>/` and ships three core files:
 | --- | --- |
 | `agent.toml` | Structured fields such as `name`, `model`, `reasoning_tokens`, and `mcp_servers`. |
 | `instructions.md` | Long-form guidance that becomes the agent’s system prompt. |
-| `entry_message.md` | Default kickoff message that the runner passes to the agent loop when no `--request` override is supplied. |
+| `default_prompt.md` | Default kickoff message that the runner passes to the agent loop when no `--request` override is supplied. |
 
 During `codex_sub_agent.config_loader.load_config`, each directory is parsed into an `AgentSettings` object. The CLI (`codex_sub_agent.cli.AgentBlueprint`) later turns that object into an `Agent`, applying temperature, reasoning token, MCP server, and tool wiring.
 
 ### Instructions vs. Entry Message
 
 - **`instructions.md`** should describe the persona’s goals, constraints, and mandatory workflows. The loader trims whitespace and injects a skill summary (see below) so you don’t have to duplicate that prose.
-- **`entry_message.md`** is much shorter—think of it as the first user utterance. When you run `codex-sub-agent --run-agent <alias>`, supplying `--request "..."` overrides this entry message only.
+- **`default_prompt.md`** is much shorter—think of it as the first user utterance. When you run `codex-sub-agent --run-agent <alias>`, supplying `--request "..."` overrides this default prompt only.
 
 ## Skill Folders
 
@@ -27,7 +27,7 @@ Agents can opt into first-class skills by creating an adjacent `skills/` directo
 config/agents/workflow/
   agent.toml
   instructions.md
-  entry_message.md
+  default_prompt.md
   skills/
     using_superpowers/
       SKILL.md

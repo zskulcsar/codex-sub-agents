@@ -397,7 +397,7 @@ async def run_agent_workflow(
     servers, exit_stack = await initialize_mcp_servers(config, alias_entry.blueprint.mcp_server_names)
     try:
         agent = alias_entry.blueprint.build_agent(list(servers.values()))
-        entry = requested_prompt or alias_entry.blueprint.settings.entry_message
+        entry = requested_prompt or alias_entry.blueprint.settings.default_prompt
         return await Runner.run(agent, entry)
     finally:
         await exit_stack.aclose()

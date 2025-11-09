@@ -22,7 +22,7 @@ class AgentSettings(BaseModel):
     name: str
     model: str = Field(default="gpt-5")
     instructions: str
-    entry_message: str
+    default_prompt: str
     temperature: float | None = Field(default=None)
     reasoning_tokens: int | None = Field(default=None)
     mcp_servers: list[str] = Field(default_factory=list)
@@ -266,12 +266,12 @@ def load_config(config_path: Path) -> SubAgentConfig:
         if not agent_path.is_dir():
             raise InvalidConfiguration(
                 f"Agent path {agent_path} must be a directory containing agent.toml, "
-                "entry_message.md, and instructions.md."
+                "default_prompt.md, and instructions.md."
             )
 
         toml_path = agent_path / "agent.toml"
         instructions_path = agent_path / "instructions.md"
-        entry_path = agent_path / "entry_message.md"
+        default_prompt_path = agent_path / "default_prompt.md"
 
         try:
             with toml_path.open("rb") as fh:
@@ -322,7 +322,7 @@ def load_config(config_path: Path) -> SubAgentConfig:
 
         agent_data["skills"] = skills
         agent_data["instructions"] = instructions_text
-        agent_data["entry_message"] = _load_markdown(entry_path, "entry message")
+        agent_data["default_prompt"] = _load_markdown(default_prompt_path, "default prompt")
 
         return agent_id, agent_data
 

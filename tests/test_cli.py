@@ -32,7 +32,7 @@ mcp_servers = ["codex"]
 """,
     )
     _write(agent_dir / "instructions.md", "Primary instructions.")
-    _write(agent_dir / "entry_message.md", "Kick things off.")
+    _write(agent_dir / "default_prompt.md", "Kick things off.")
     _write(
         skill_dir / "SKILL.md",
         """---

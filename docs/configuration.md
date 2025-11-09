@@ -11,7 +11,7 @@ config/
     workflow/
       agent.toml
       instructions.md
-      entry_message.md
+      default_prompt.md
     security_review/
       ...
     test_agent/
@@ -75,7 +75,7 @@ mcp_servers = ["codex", "context7", "github"]
 Free-form text lives in Markdown files sitting next to the TOML:
 
 - `instructions.md` for the long-form instructions block
-- `entry_message.md` for the kickoff prompt shown to the workflow
+- `default_prompt.md` for the kickoff prompt shown to the workflow
 
 Key tips:
 - `mcp_servers` must reference names that exist under `[mcp_servers.*]`.

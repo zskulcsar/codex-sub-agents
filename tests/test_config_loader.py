@@ -29,7 +29,7 @@ def test_load_config_supports_agent_directory(tmp_path: Path) -> None:
         """,
     )
     _write_file(agent_dir / "instructions.md", "Use the Codex MCP server.")
-    _write_file(agent_dir / "entry_message.md", "Kick things off.")
+    _write_file(agent_dir / "default_prompt.md", "Kick things off.")
 
     _write_file(
         config_root / "codex_sub_agents.toml",
@@ -54,7 +54,7 @@ def test_load_config_supports_agent_directory(tmp_path: Path) -> None:
 
     assert agent.name == "Demo Agent"
     assert agent.instructions == "Use the Codex MCP server."
-    assert agent.entry_message == "Kick things off."
+    assert agent.default_prompt == "Kick things off."
 
 
 def test_load_config_discovers_agent_skills(tmp_path: Path) -> None:
@@ -75,7 +75,7 @@ def test_load_config_discovers_agent_skills(tmp_path: Path) -> None:
         """,
     )
     _write_file(agent_dir / "instructions.md", "Primary instructions.")
-    _write_file(agent_dir / "entry_message.md", "Kick things off.")
+    _write_file(agent_dir / "default_prompt.md", "Kick things off.")
 
     _write_file(
         skill_dir / "SKILL.md",

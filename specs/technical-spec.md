@@ -14,11 +14,11 @@ External dependencies: OpenAI API (Responses), Context7 MCP, GitHub MCP, and Cod
   - Hosts the MCP server (using `mcp.server.Server`).
 - `codex_sub_agent/config_loader.py`
   - Loads `codex_sub_agents.toml` plus per-agent directories.
-  - Validates schema with Pydantic models (`AgentSettings`, `MCPStdioConfig`, `MCPHttpConfig`) and reads Markdown (`instructions.md`, `entry_message.md`) alongside `agent.toml`.
+  - Validates schema with Pydantic models (`AgentSettings`, `MCPStdioConfig`, `MCPHttpConfig`) and reads Markdown (`instructions.md`, `default_prompt.md`) alongside `agent.toml`.
 - `codex_sub_agent/codex_mcp_wrapper.py`
   - Optional helper that proxies `npx codex mcp-server` while filtering Codex-specific `codex/event` notifications.
 - `config/` bundle
-  - Ships default MCP server definitions, agent profiles, and aliases so a fresh install works instantly. Each agent directory contains `agent.toml`, `instructions.md`, and `entry_message.md`.
+  - Ships default MCP server definitions, agent profiles, and aliases so a fresh install works instantly. Each agent directory contains `agent.toml`, `instructions.md`, and `default_prompt.md`.
 
 ## Data & Control Flows
 1. **CLI run:** user calls `codex-sub-agent --config path --run-agent alias` → CLI loads config → `AgentRegistry` resolves alias → `initialize_mcp_servers` starts required MCP servers → Agents SDK runs instructions with the provided entry message → CLI prints final output.
@@ -30,7 +30,7 @@ External dependencies: OpenAI API (Responses), Context7 MCP, GitHub MCP, and Cod
 - **MCP servers:**
   - STDIO: `type`, `name`, `command`, optional `args`, `env`, `client_session_timeout_seconds`.
   - HTTP: `type`, `name`, `url`, optional `headers`, `bearer_token_env_var`, timeout.
-- **Agents:** `id`, `name`, `model`, `temperature`, `reasoning_tokens`, `instructions`, `entry_message`, `mcp_servers`. Metadata lives in `agent.toml`; textual fields are sourced from Markdown files sitting next to it.
+- **Agents:** `id`, `name`, `model`, `temperature`, `reasoning_tokens`, `instructions`, `default_prompt`, `mcp_servers`. Metadata lives in `agent.toml`; textual fields are sourced from Markdown files sitting next to it.
 - **Aliases:** map of user-facing names to agent IDs; tool names are sanitized versions (non-alphanumeric replaced with `_`).
 - **Environment sourcing:** before validating credentials, the CLI looks for `.envrc` in the current working directory and sources it with `bash` so missing variables like `OPENAI_API_KEY` are populated. Existing process values take precedence.
 

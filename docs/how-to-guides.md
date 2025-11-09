@@ -6,7 +6,7 @@ Pick the scenario closest to your task and follow the numbered steps.
 
 1. Copy an existing folder under `config/agents/` (for example `workflow/`) and rename it.
 2. Edit the new folder’s `agent.toml` (`id`, `name`, `model`, `mcp_servers`, tokens/temperature).
-3. Update `instructions.md` and `entry_message.md` with Markdown content.
+3. Update `instructions.md` and `default_prompt.md` with Markdown content.
 4. Add an alias in `codex_sub_agents.toml`:
    ```toml
    [aliases]

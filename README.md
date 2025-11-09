@@ -19,9 +19,9 @@ cp -R config/* ~/.config/codex/
 ```
 
 - `codex_sub_agents.toml` defines shared OpenAI settings, the `[aliases]` map, and any reusable MCP server definitions (Codex wrapper, GitHub, Context7, etc.). The `[mcp_servers.*]` section is optional—declare only the servers you plan to reference from agents.
-- Each `agents/<name>/` directory contains `agent.toml`, `entry_message.md`, and `instructions.md`. The TOML file holds the structured fields (id, model, mcp_servers, etc.) while the Markdown files keep rich text for the entry message and long-form instructions.
+- Each `agents/<name>/` directory contains `agent.toml`, `default_prompt.md`, and `instructions.md`. The TOML file holds the structured fields (id, model, mcp_servers, etc.) while the Markdown files keep rich text for the default prompt and long-form instructions.
 
-Paths listed under `agent_files` are resolved relative to the main TOML file, so moving the folder together keeps references intact. Add or remove agent files by editing that list; each agent file must declare an `id` plus an `[agent]` table with the usual fields (instructions, entry_message, etc.).
+Paths listed under `agent_files` are resolved relative to the main TOML file, so moving the folder together keeps references intact. Add or remove agent files by editing that list; each agent file must declare an `id` plus an `[agent]` table with the usual fields (instructions, default_prompt, etc.).
 When an agent lists a server in `mcp_servers`, the runtime verifies that an entry exists under `[mcp_servers.<name>]` before launching the workflow so typos are caught up front.
 
 Expose stable mentions via the `[aliases]` table so Codex users can call agents by name:
