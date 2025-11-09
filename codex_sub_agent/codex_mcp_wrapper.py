@@ -1,14 +1,11 @@
 """Wrapper that launches `npx codex mcp` while filtering Codex-only notifications."""
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys
-from typing import List
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Proxy `codex mcp-server` while stripping Codex-only notifications.
 
     Args:

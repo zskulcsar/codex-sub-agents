@@ -6,6 +6,7 @@ When you only have a few minutes, follow this page to get Codex Sub-Agent runnin
 
 - macOS, Linux, or WSL with Python 3.11+ and Node.js 18+ available on `PATH`.
 - Access to `uv` or `pip` for installation.
+- [direnv](https://direnv.net/) installed so `.envrc` files can be trusted via `direnv allow`.
 - Environment variables ready: `OPENAI_API_KEY` (always) and `GITHUB_PERSONAL_ACCESS_TOKEN` if you plan to talk to GitHub.
 
 ## 2. Install the Package
@@ -25,8 +26,10 @@ The CLI entry point `codex-sub-agent` becomes available immediately after the in
 
 ```bash
 mkdir -p ~/.config/codex
-cp -R config ~/.config/codex/
+cp -R config/* ~/.config/codex/
 ```
+
+> Tip: the installed wheel already ships a copy of this bundle, so `codex-sub-agent --list-agents` works even without `--config`. Copying the files locally just makes customization easier.
 
 ## 4. Register the MCP Server with Codex CLI
 

@@ -13,6 +13,11 @@ uv pip install --system .
 
 Copy the configuration bundle from the project’s root `config/` directory to your preferred location (for example `~/.config/codex/`), then adjust paths as needed:
 
+```bash
+mkdir -p ~/.config/codex
+cp -R config/* ~/.config/codex/
+```
+
 - `codex_sub_agents.toml` defines shared OpenAI settings, the `[aliases]` map, and any reusable MCP server definitions (Codex wrapper, GitHub, Context7, etc.). The `[mcp_servers.*]` section is optional—declare only the servers you plan to reference from agents.
 - Each `agents/<name>/` directory contains `agent.toml`, `entry_message.md`, and `instructions.md`. The TOML file holds the structured fields (id, model, mcp_servers, etc.) while the Markdown files keep rich text for the entry message and long-form instructions.
 
@@ -30,7 +35,7 @@ Expose stable mentions via the `[aliases]` table so Codex users can call agents 
 
 Inside Codex, run `agent csa:default`, `agent csa:test-agent`, or `agent csa:security` to dispatch the matching sub-agent without remembering internal IDs.
 
-The `codex-sub-agent-codex-mcp` helper (installed with this package) starts `npx codex mcp-server` and silently drops Codex-specific `codex/event` notifications so the MCP client stays quiet. The default config already points to this helper; customize the `command` or add arguments if you need extra flags.
+If you install the wheel from PyPI, the CLI automatically falls back to the packaged version of this bundle (resolved with `importlib.resources`) so `codex-sub-agent --list-agents` works out-of-the-box. Supplying `--config` still lets you point to a customized copy, like the example above.
 
 > MCP tool names may only contain `[A-Za-z0-9_-]`, so when Codex lists tools it replaces punctuation in the alias (for example `csa:test-agent` → `csa_test-agent`). Use the sanitized name inside Codex (`agent csa_test-agent`), but the CLI always accepts the original alias (`--run-agent csa:test-agent`).
 
@@ -47,7 +52,7 @@ Set the following environment variables so the agent can authenticate:
 - `OPENAI_API_KEY`
 - `GITHUB_PERSONAL_ACCESS_TOKEN` (if you want access to the GitHub MCP server)
 
-When the CLI starts, it looks for a `.envrc` in the current working directory (typically the repo root). If it finds one, it sources the file with `bash` and imports `OPENAI_API_KEY` only when it isn’t already set. This keeps secrets out of `.codex/config.toml` while still allowing the Codex sandbox to launch the agent with the right credentials.
+Install [direnv](https://direnv.net/) and run `direnv allow` in repositories that contain a `.envrc`. The CLI uses `direnv export json` to hydrate any missing secrets (e.g., `OPENAI_API_KEY`) so that only trusted directories can influence your environment.
 
 ## Registering with Codex CLI
 

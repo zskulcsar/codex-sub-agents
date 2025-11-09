@@ -1,9 +1,7 @@
 """Utilities for loading and validating sub-agent configuration files."""
 
-from __future__ import annotations
-
 from pathlib import Path
-from typing import Dict, Literal, Union
+from typing import Literal
 
 import tomllib
 from pydantic import BaseModel, Field, ValidationError
@@ -50,7 +48,7 @@ class MCPHttpConfig(BaseModel):
     client_session_timeout_seconds: float = Field(default=60.0)
 
 
-MCPConfig = Union[MCPStdioConfig, MCPHttpConfig]
+MCPConfig = MCPStdioConfig | MCPHttpConfig
 
 
 class SubAgentConfig(BaseModel):
@@ -58,22 +56,22 @@ class SubAgentConfig(BaseModel):
 
     openai: OpenAISettings = Field(default_factory=OpenAISettings)
     agent: AgentSettings | None = None
-    agents: Dict[str, AgentSettings] = Field(default_factory=dict)
+    agents: dict[str, AgentSettings] = Field(default_factory=dict)
     default_agent_id: str | None = None
-    aliases: Dict[str, str] = Field(default_factory=dict)
-    mcp_servers: Dict[str, MCPConfig] = Field(default_factory=dict)
+    aliases: dict[str, str] = Field(default_factory=dict)
+    mcp_servers: dict[str, MCPConfig] = Field(default_factory=dict)
 
     model_config = {"use_enum_values": True, "populate_by_name": True}
 
-    def _agent_map(self) -> Dict[str, AgentSettings]:
+    def _agent_map(self) -> dict[str, AgentSettings]:
         """Return a mapping of agent identifiers to their settings."""
 
-        mapping: Dict[str, AgentSettings] = dict(self.agents)
+        mapping: dict[str, AgentSettings] = dict(self.agents)
         if self.agent is not None:
             mapping.setdefault("default", self.agent)
         return mapping
 
-    def available_agents(self) -> Dict[str, AgentSettings]:
+    def available_agents(self) -> dict[str, AgentSettings]:
         """List all configured agents, ensuring at least one exists."""
 
         agents = self._agent_map()
@@ -119,6 +117,33 @@ class InvalidConfiguration(Exception):
     """Raised when the configuration file cannot be parsed."""
 
 
+def _normalize_mcp_servers(raw_value: object) -> list[str]:
+    """Return a normalized list of MCP server names for an agent configuration."""
+
+    if raw_value is None:
+        return []
+
+    servers: list[str] = []
+    if isinstance(raw_value, list):
+        for index, value in enumerate(raw_value):
+            if not isinstance(value, str) or not value.strip():
+                raise InvalidConfiguration(
+                    f"mcp_servers[{index}] must be a non-empty string when defined as a list."
+                )
+            servers.append(value.strip())
+        return servers
+
+    if isinstance(raw_value, dict):
+        for name, enabled in raw_value.items():
+            if not isinstance(name, str) or not name.strip():
+                raise InvalidConfiguration("mcp_servers keys must be non-empty strings.")
+            if enabled:
+                servers.append(name.strip())
+        return servers
+
+    raise InvalidConfiguration("mcp_servers must be declared as a list of strings or a table of booleans.")
+
+
 def load_config(config_path: Path) -> SubAgentConfig:
     """Load and validate a TOML configuration file.
 
@@ -136,7 +161,7 @@ def load_config(config_path: Path) -> SubAgentConfig:
             malformed.
     """
 
-    def _load_agent_dir(agent_path: Path) -> tuple[str, Dict[str, object]]:
+    def _load_agent_dir(agent_path: Path) -> tuple[str, dict[str, object]]:
         """Read an agent directory containing TOML + Markdown assets."""
 
         if not agent_path.is_dir():
@@ -172,6 +197,11 @@ def load_config(config_path: Path) -> SubAgentConfig:
             raise InvalidConfiguration(
                 f"Agent file {toml_path} must define agent settings under an 'agent' table."
             )
+
+        raw_servers = agent_data.get("mcp_servers")
+        if raw_servers is None and "mcp_servers" in agent_payload:
+            raw_servers = agent_payload["mcp_servers"]
+        agent_data["mcp_servers"] = _normalize_mcp_servers(raw_servers)
 
         def _load_markdown(markdown_path: Path, label: str) -> str:
             try:

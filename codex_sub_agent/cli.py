@@ -1,21 +1,27 @@
 """Command-line entry point and MCP server implementation for Codex sub-agents."""
 
-from __future__ import annotations
-
 import argparse
 import asyncio
+import importlib.resources as importlib_resources
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
-import re
-import subprocess
-from typing import Any, Dict, Iterable, List
+from typing import Any, Iterable
 
 from agents import Agent, ModelSettings, RunResult, Runner, set_default_openai_api, set_default_openai_key
-from agents.mcp import MCPServer, MCPServerStdio, MCPServerStdioParams, MCPServerStreamableHttp, MCPServerStreamableHttpParams
+from agents.mcp import (
+    MCPServer,
+    MCPServerStdio,
+    MCPServerStdioParams,
+    MCPServerStreamableHttp,
+    MCPServerStreamableHttpParams,
+)
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as mcp_types
@@ -23,7 +29,7 @@ import mcp.types as mcp_types
 from . import __version__
 from .config_loader import AgentSettings, InvalidConfiguration, MCPHttpConfig, MCPStdioConfig, SubAgentConfig, load_config
 
-AGENT_TOOL_INPUT_SCHEMA: Dict[str, Any] = {
+AGENT_TOOL_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "request": {
@@ -41,7 +47,7 @@ class AgentBlueprint:
 
     agent_id: str
     settings: AgentSettings
-    mcp_server_names: List[str]
+    mcp_server_names: list[str]
 
     def build_agent(self, mcp_servers: Iterable[MCPServer]) -> Agent[Any]:
         """Create an Agents SDK `Agent` from the stored blueprint.
@@ -83,7 +89,7 @@ class AgentRegistry:
     def __init__(self, config: SubAgentConfig):
         self.config = config
         agents = config.available_agents()
-        self._blueprints: Dict[str, AgentBlueprint] = {
+        self._blueprints: dict[str, AgentBlueprint] = {
             agent_id: AgentBlueprint(
                 agent_id=agent_id,
                 settings=settings,
@@ -95,8 +101,8 @@ class AgentRegistry:
         if not config.aliases:
             raise InvalidConfiguration("No aliases defined in [aliases]. At least one alias is required.")
 
-        self.tool_entries: Dict[str, AgentAliasEntry] = {}
-        self.aliases_by_agent: Dict[str, List[str]] = {agent_id: [] for agent_id in agents}
+        self.tool_entries: dict[str, AgentAliasEntry] = {}
+        self.aliases_by_agent: dict[str, list[str]] = {agent_id: [] for agent_id in agents}
         used_tool_names: set[str] = set()
 
         for alias, agent_id in config.aliases.items():
@@ -115,7 +121,7 @@ class AgentRegistry:
             self.tool_entries[tool_name] = entry
             self.aliases_by_agent[agent_id].append(alias)
 
-        self.cli_aliases: Dict[str, AgentAliasEntry] = {}
+        self.cli_aliases: dict[str, AgentAliasEntry] = {}
         for entry in self.tool_entries.values():
             self.cli_aliases[entry.alias] = entry
             self.cli_aliases[entry.tool_name] = entry
@@ -133,7 +139,7 @@ class AgentRegistry:
                 self.cli_aliases[agent_id] = entry
                 self.cli_aliases[fallback_tool] = entry
 
-        self.tool_definitions: List[mcp_types.Tool] = [
+        self.tool_definitions: list[mcp_types.Tool] = [
             mcp_types.Tool(
                 name=entry.tool_name,
                 description=entry.description,
@@ -174,7 +180,7 @@ class AgentRegistry:
             raise InvalidConfiguration(f"Unknown agent '{alias}'. Available: {', '.join(sorted(self.cli_aliases))}")
         return self.cli_aliases[alias]
 
-    def iter_agent_summaries(self) -> Iterable[tuple[str, AgentSettings, List[str]]]:
+    def iter_agent_summaries(self) -> Iterable[tuple[str, AgentSettings, list[str]]]:
         """Yield configured agents with their CLI-visible aliases.
 
         Returns:
@@ -225,13 +231,20 @@ class AgentRegistry:
 
 
 def _default_config_path() -> Path | None:
-    """Return the packaged TOML path if it exists in the installed tree.
+    """Return the packaged configuration file shipped with the module."""
 
-    Returns:
-        Absolute path to the baked-in configuration or ``None`` if missing.
-    """
-    candidate = Path(__file__).resolve().parent.parent / "config" / "codex_sub_agents.toml"
-    return candidate if candidate.exists() else None
+    try:
+        resource = importlib_resources.files("codex_sub_agent_config") / "codex_sub_agents.toml"
+    except ModuleNotFoundError:  # pragma: no cover - only during broken installs
+        return None
+
+    try:
+        with importlib_resources.as_file(resource) as resolved:
+            if resolved.exists():
+                return resolved
+    except FileNotFoundError:
+        return None
+    return None
 
 
 def build_main_parser() -> argparse.ArgumentParser:
@@ -298,7 +311,7 @@ def build_configure_parser() -> argparse.ArgumentParser:
 async def initialize_mcp_servers(
     config: SubAgentConfig,
     server_names: Iterable[str],
-) -> tuple[Dict[str, MCPServer], AsyncExitStack]:
+) -> tuple[dict[str, MCPServer], AsyncExitStack]:
     """Start the MCP servers referenced by an agent blueprint.
 
     Args:
@@ -312,7 +325,7 @@ async def initialize_mcp_servers(
         InvalidConfiguration: If an agent references an unknown server.
         RuntimeError: If an HTTP server is missing a required credential.
     """
-    servers: Dict[str, MCPServer] = {}
+    servers: dict[str, MCPServer] = {}
     exit_stack = AsyncExitStack()
     await exit_stack.__aenter__()
 
@@ -434,7 +447,7 @@ async def serve(config: SubAgentConfig, registry: AgentRegistry) -> int:
         return mcp_types.ListToolsResult(tools=registry.tool_definitions)
 
     @server.call_tool()
-    async def handle_call_tool(tool_name: str, arguments: Dict[str, Any]):
+    async def handle_call_tool(tool_name: str, arguments: dict[str, Any]):
         async with tool_lock:
             entry = registry.resolve_tool_name(tool_name)
             request_override = None
@@ -463,30 +476,35 @@ async def serve(config: SubAgentConfig, registry: AgentRegistry) -> int:
     return 0
 
 
-def _load_env_file(env_file: Path) -> Dict[str, str]:
-    """Source a shell-compatible env file and capture resulting environment."""
+def _load_env_from_direnv(directory: Path) -> dict[str, str]:
+    """Execute `direnv export json` within ``directory`` and return the environment."""
 
-    command = [
-        "bash",
-        "-lc",
-        f'set -a && source "{env_file}" >/dev/null && env -0',
-    ]
+    if shutil.which("direnv") is None:
+        raise RuntimeError("direnv executable not found in PATH.")
+
+    command = ["direnv", "export", "json"]
+    result = subprocess.run(command, cwd=str(directory), capture_output=True, text=True)
+    if result.returncode != 0:
+        error_output = result.stderr.strip() or "direnv export failed"
+        raise RuntimeError(error_output)
+
     try:
-        result = subprocess.run(command, check=True, capture_output=True)
-    except subprocess.CalledProcessError as exc:
-        raise RuntimeError(f"Failed to source {env_file}: {exc.stderr.decode().strip()}") from exc
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("direnv export produced invalid JSON output.") from exc
 
-    env_map: Dict[str, str] = {}
-    for chunk in result.stdout.split(b"\x00"):
-        if not chunk:
-            continue
-        key, _, value = chunk.partition(b"=")
-        env_map[key.decode()] = value.decode()
+    if not isinstance(payload, dict):
+        raise RuntimeError("direnv export response must be a JSON object.")
+
+    env_map: dict[str, str] = {}
+    for key, value in payload.items():
+        if isinstance(value, str):
+            env_map[key] = value
     return env_map
 
 
 def _populate_env_from_envrc(config: SubAgentConfig) -> None:
-    """Ensure required env vars are populated by sourcing .envrc if necessary."""
+    """Ensure required env vars are populated via direnv when available."""
 
     required: list[str] = []
     if config.openai.api_key_env_var:
@@ -500,7 +518,12 @@ def _populate_env_from_envrc(config: SubAgentConfig) -> None:
     if not envrc_path.exists():
         return
 
-    env_map = _load_env_file(envrc_path)
+    try:
+        env_map = _load_env_from_direnv(envrc_path.parent)
+    except RuntimeError:
+        return
+
+    # TODO: this works, but ideally we want to re-source all the variables from .envrc for the sub-agents
     for var in missing:
         value = env_map.get(var)
         if value:
@@ -563,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list_agents:
         for agent_id, settings, aliases in registry.iter_agent_summaries():
-            alias_render: List[str] = []
+            alias_render: list[str] = []
             for alias in aliases:
                 entry = registry.cli_aliases.get(alias)
                 if entry and entry.expose_in_tools:

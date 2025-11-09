@@ -8,6 +8,7 @@ This page expands on installation scenarios for teams that need repeatable, audi
 | --- | --- |
 | Python | >= 3.11 with `pip` or `uv` |
 | Node.js | >= 18 (needed for Codex CLI / MCP helpers) |
+| direnv | Latest stable release on `PATH` |
 | OpenAI access | `OPENAI_API_KEY` with Responses API enabled |
 | Optional GitHub MCP | `GITHUB_PERSONAL_ACCESS_TOKEN` with `repo` + `workflow` scopes |
 

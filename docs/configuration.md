@@ -97,6 +97,6 @@ Key tips:
 
 ## Environment variables
 
-If `OPENAI_API_KEY` (or other required secrets) are not already set when the CLI starts, it will look for a `.envrc` in the current working directory and source it via `bash`. This mirrors the way you might manage credentials locally and keeps secrets out of `.codex/config.toml`. Any value already present in the environment takes precedence.
+If `OPENAI_API_KEY` (or other required secrets) are not already set when the CLI starts, it will invoke `direnv export json` in the current working directory. This mirrors the way you might manage credentials locally while respecting direnv’s trust model—run `direnv allow` before expecting `.envrc` values to load. Any value already present in the environment takes precedence.
 
 If anything fails, see `troubleshooting.md` for targeted fixes.

@@ -1,7 +1,5 @@
 """Integration-style tests for the CLI entry point."""
 
-from __future__ import annotations
-
 from pathlib import Path
 import os
 
@@ -97,7 +95,7 @@ def test_run_agent_flag_invokes_alias(sample_config_dir: Path, monkeypatch: pyte
 
 
 def test_envrc_in_current_directory_supplies_missing_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """When OPENAI_API_KEY is missing, .envrc in CWD is sourced."""
+    """When OPENAI_API_KEY is missing, direnv-provided values fill it in."""
 
     envrc = tmp_path / ".envrc"
     envrc.write_text('export OPENAI_API_KEY="from-envrc"\n', encoding="utf-8")
@@ -118,6 +116,7 @@ client_session_timeout_seconds = 60
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli, "_load_env_from_direnv", lambda _: {"OPENAI_API_KEY": "from-envrc"})
 
     cli._populate_env_from_envrc(load_config(config_path))
     assert os.environ["OPENAI_API_KEY"] == "from-envrc"
@@ -145,6 +144,7 @@ client_session_timeout_seconds = 60
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "preexisting")
+    monkeypatch.setattr(cli, "_load_env_from_direnv", lambda _: {"OPENAI_API_KEY": "from-envrc"})
 
     cli._populate_env_from_envrc(load_config(config_path))
     assert os.environ["OPENAI_API_KEY"] == "preexisting"

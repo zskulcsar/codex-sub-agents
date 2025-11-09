@@ -1,7 +1,5 @@
 """Tests for loading agent configurations from multi-file directories."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from codex_sub_agent.config_loader import load_config

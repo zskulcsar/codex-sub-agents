@@ -38,19 +38,11 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["codex_sub_agent"]
+packages = ["codex_sub_agent", "codex_sub_agent_config"]
 include-package-data = true
 
-[tool.setuptools.data-files]
-"share/codex-sub-agent/config" = [
-  "config/codex_sub_agents.toml",
-  "config/agents/workflow/agent.toml",
-  "config/agents/workflow/entry_message.md",
-  "config/agents/workflow/instructions.md",
-  "config/agents/security_review/agent.toml",
-  "config/agents/security_review/entry_message.md",
-  "config/agents/security_review/instructions.md",
-  "config/agents/test_agent/agent.toml",
-  "config/agents/test_agent/entry_message.md",
-  "config/agents/test_agent/instructions.md",
-]
+[tool.setuptools.package-dir]
+codex_sub_agent_config = "config"
+
+[tool.setuptools.package-data]
+"codex_sub_agent_config" = ["**/*"]

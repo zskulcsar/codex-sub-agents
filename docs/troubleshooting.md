@@ -4,8 +4,13 @@ Short answers to the most common errors. Each entry lists the symptom, likely ca
 
 ## Missing `OPENAI_API_KEY`
 - **Symptom:** CLI exits with `Missing environment variable OPENAI_API_KEY`.
-- **Cause:** Env var not exported or running under a different shell.
-- **Fix:** `export OPENAI_API_KEY=sk-...` (plus restart your terminal) or add it to the repo’s `.envrc` so the CLI pulls it in automatically. On CI, add it to the job’s secret store.
+- **Cause:** Env var not exported, `direnv` not installed, or the repo hasn’t been trusted yet.
+- **Fix:** Install `direnv`, run `direnv allow` in the repo so the `.envrc` can be evaluated, or export the key manually (`export OPENAI_API_KEY=sk-...`). On CI, add it to the job’s secret store.
+
+## `.envrc` not trusted
+- **Symptom:** CLI still can’t see secrets even though `.envrc` sets them.
+- **Cause:** The directory was not authorized via `direnv allow` or `direnv` is missing from `PATH`.
+- **Fix:** Install `direnv`, ensure it’s on `PATH`, then re-run `direnv allow` inside the repository. The CLI only invokes `direnv export json` to mirror direnv’s trust model, so no `.envrc` runs until you allow it.
 
 ## MCP Server Not Found
 - **Symptom:** `Agent references unknown MCP server 'context7'` during `--run-agent`.
