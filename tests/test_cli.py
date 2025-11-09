@@ -8,6 +8,7 @@ from agents.tool import FunctionTool
 import pytest
 
 from codex_sub_agent import cli
+from codex_sub_agent.agent_runtime import AgentBlueprint
 from codex_sub_agent.config_loader import load_config
 
 
@@ -16,7 +17,7 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _configure_agent_with_skill(tmp_path: Path) -> tuple[Path, cli.AgentBlueprint]:
+def _configure_agent_with_skill(tmp_path: Path) -> tuple[Path, AgentBlueprint]:
     config_root = tmp_path / "config"
     agent_dir = config_root / "agents" / "demo"
     skill_dir = agent_dir / "skills" / "deep_focus"
@@ -60,7 +61,7 @@ client_session_timeout_seconds = 60
 
     config = load_config(config_path)
     settings = config.available_agents()["demo"]
-    blueprint = cli.AgentBlueprint(agent_id="demo", settings=settings, mcp_server_names=[])
+    blueprint = AgentBlueprint(agent_id="demo", settings=settings, mcp_server_names=[])
     return config_path, blueprint
 
 
@@ -132,7 +133,9 @@ def test_run_agent_flag_invokes_alias(sample_config_dir: Path, monkeypatch: pyte
         return DummyResult()
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(cli, "run_agent_workflow", fake_run_agent)
+    import codex_sub_agent.mcp_server as mcp_server
+
+    monkeypatch.setattr(mcp_server, "run_agent_workflow", fake_run_agent)
 
     exit_code = cli.main(
         [
@@ -209,7 +212,8 @@ def test_agent_blueprint_builds_skill_tools(tmp_path: Path) -> None:
     """Skill metadata results in registered function tools on the agent."""
 
     _, blueprint = _configure_agent_with_skill(tmp_path)
-    agent = blueprint.build_agent(mcp_servers=[])
+    tools = [skill.build_tool() for skill in blueprint.settings.skills]
+    agent = blueprint.build_agent(tools=tools, mcp_servers=[])
 
     assert agent.tools, "Skill tool should be registered"
     tool = agent.tools[0]
