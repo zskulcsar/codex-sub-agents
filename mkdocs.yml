@@ -1,7 +1,7 @@
 site_name: Codex Sub-Agent
 site_description: Reusable MCP workflows for Codex CLI
-site_url: https://example.com/codex-sub-agent
-repo_url: https://github.com/example/codex-sub-agent
+site_url: https://zskulcsar.github.io/codex-sub-agents
+repo_url: https://github.com/zskulcsar/codex-sub-agents
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
@@ -13,8 +13,8 @@ nav:
 docs_dir: docs
 site_dir: site
 theme:
-  name: mkdocs
+  name: material
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/example/codex-sub-agent
+      link: https://github.com/zskulcsar/codex-sub-agents

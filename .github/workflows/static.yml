@@ -44,7 +44,9 @@ jobs:
         run: make venv
 
       - name: Build docs
-        run: make docs
+        run: |
+          uv pip install mkdocs-material
+          make docs
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
