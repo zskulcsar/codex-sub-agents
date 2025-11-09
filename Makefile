@@ -1,4 +1,4 @@
-.PHONY: help venv package docs lint typecheck test install clean
+.PHONY: help venv package docs lint typecheck test pip-audit safety install clean
 
 UV ?= uv
 PYTHON ?= .venv/bin/python
@@ -11,6 +11,8 @@ help:
 	@echo "  lint        - Run Ruff lint checks"
 	@echo "  typecheck   - Run mypy static type checks"
 	@echo "  test        - Run unit tests under ./tests using pytest"
+	@echo "  pip-audit   - Scan installed dependencies for known vulnerabilities (pip-audit)"
+	@echo "  safety      - Scan installed dependencies for known vulnerabilities (safety)"
 	@echo "  install     - Install the CLI into $$HOME/.local/bin for direct use"
 	@echo "  clean       - Remove build artifacts, caches, and the virtual environment"
 
@@ -39,6 +41,14 @@ typecheck: venv
 test: venv
 	$(UV) pip install --python .venv pytest
 	.venv/bin/pytest tests
+
+pip-audit: venv
+	$(UV) pip install --python .venv pip-audit
+	.venv/bin/pip-audit
+
+safety: venv
+	$(UV) pip install --python .venv safety
+	.venv/bin/safety scan --full-report
 
 install:
 	python3 -m pip install --upgrade .
